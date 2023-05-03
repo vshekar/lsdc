@@ -238,22 +238,19 @@ class ControlMain(QtWidgets.QMainWindow):
         self.XRFInfoDict = self.parseXRFTable()  # I don't like this
 
     def setGuiValues(self, values):
+        mapping = {
+            "osc_start": self.osc_start_ledit,
+            "osc_end": self.osc_end_ledit,
+            "osc_range": self.osc_range_ledit,
+            "exp_time": self.exp_time_ledit,
+            "transmission": self.transmission_ledit,
+            "resolution": self.resolution_ledit,
+        }
         for item, value in values.items():
             logger.info("resetting %s to %s" % (item, value))
-            if item == "osc_start":
-                self.osc_start_ledit.setText("%.3f" % float(value))
-            elif item == "osc_end":
-                self.osc_end_ledit.setText("%.3f" % float(value))
-            elif item == "osc_range":
-                self.osc_range_ledit.setText("%.3f" % float(value))
-            elif item == "img_width":
-                self.img_width_ledit.setText("%.3f" % float(value))
-            elif item == "exp_time":
-                self.exp_time_ledit.setText("%.3f" % float(value))
-            elif item == "transmission":
-                self.transmission_ledit.setText("%.3f" % float(value))
-            elif item == "resolution":
-                self.resolution_ledit.setText("%.2f" % float(value))
+            widget = mapping.get(item, None)
+            if widget:
+                widget.setText(f"{float(value):.3f}")
             else:
                 logger.error("setGuiValues unknown item: %s value: %s" % (item, value))
 
@@ -3718,8 +3715,10 @@ class ControlMain(QtWidgets.QMainWindow):
                 elif itemDataType == "request":
                     selectedSampleRequest = db_lib.getRequestByID(item.data(32))
                     self.selectedSampleID = selectedSampleRequest["sample"]
-                
-                if self.selectedSampleID in samplesConsidered: # If a request is already added to the sample, move on
+
+                if (
+                    self.selectedSampleID in samplesConsidered
+                ):  # If a request is already added to the sample, move on
                     continue
 
                 try:
