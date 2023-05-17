@@ -49,6 +49,8 @@ def pybass_init():
   beamline_lib.init_mots()    #for now
   logger.info("init done mots")
   daq_lib.init_diffractometer()
+  # Set basefolder to where the server is currently running
+  daq_utils.setBlConfig("baseFolder", os.getcwd(),daq_utils.beamline)
   try:
     sitefilename = os.environ["LSDC_SITE_FILE"]
   except KeyError:
