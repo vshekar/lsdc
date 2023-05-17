@@ -61,6 +61,7 @@ def check_daq_utils():
 )
 def check_working_directory():
     import daq_utils
+    import os
     working_dir = Path.cwd()
     home_dir = Path.home()
     if home_dir in working_dir.parents or home_dir == working_dir:
@@ -69,6 +70,9 @@ def check_working_directory():
     if daq_utils.beamline not in working_dir.parts: 
         # Hacky way to check if amx or fmx is in path. Unless server can tell GUI where its running?
         check_working_directory.remediation = f'Please start LSDC in {daq_utils.beamline} data directory. Current directory: {working_dir}'
+        return False
+    if daq_utils.getBlConfig('basePath', daq_utils.beamline) != os.getcwd():
+        check_working_directory.remediation = 'Working directory mismatch. Please start LSDC in the same folder where the server is running.'
         return False
     else:
         return True

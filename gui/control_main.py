@@ -51,6 +51,7 @@ from gui.dialog import (
 from gui.raster import RasterCell, RasterGroup
 from QPeriodicTable import QPeriodicTable
 from threads import RaddoseThread, VideoThread
+from utils import runtimecheck
 
 logger = logging.getLogger()
 try:
@@ -203,6 +204,11 @@ class ControlMain(QtWidgets.QMainWindow):
         self.raddoseTimer.setSingleShot(True)
         self.raddoseTimer.setInterval(1000)
         self.raddoseTimer.timeout.connect(self.spawnRaddoseThread)
+
+        self.runtimeCheckTimer = QTimer()
+        # Check runtime conditions every 10 seconds
+        self.runtimeCheckTimer.setInterval(10_000)
+        self.runtimeCheckTimer.timeout.connect(runtimecheck.perform_runtime_checks)
 
         self.createSampleTab()
 
