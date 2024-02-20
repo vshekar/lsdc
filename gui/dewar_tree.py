@@ -15,6 +15,9 @@ from config_params import (
     PUCKS_PER_DEWAR_SECTOR,
     SAMPLE_TIMER_DELAY,
 )
+from utils.raster import get_raster_result_matrix
+import numpy as np
+import plotly.graph_objects as go
 
 if typing.TYPE_CHECKING:
     from lsdcGui import ControlMain
@@ -76,12 +79,18 @@ class DewarTree(QtWidgets.QTreeView):
                         "Dequeue selected request(s)", self
                     )
                     dequeueSelAction.triggered.connect(self.deQueueAllSelectedCB)
+                    get3DPlot = QtWidgets.QAction(
+                        "Show 3D plot"
+                    )
+                    get3DPlot.triggered.connect(self.plot3DCB)
+
                     menu.addAction(useParamsAction)
                     menu.addAction(cloneReqAction)
                     menu.addAction(queueSelAction)
                     menu.addAction(dequeueSelAction)
                     menu.addSeparator()
                     menu.addAction(deleteReqAction)
+                    menu.addAction(get3DPlot)
                 menu.exec_(self.viewport().mapToGlobal(position))
 
     def useParamsCB(self):
@@ -90,6 +99,115 @@ class DewarTree(QtWidgets.QTreeView):
         requestData = db_lib.getRequestByID(item.data(32))
         reqObj = requestData['request_obj']
         self.parent.fillRequestParameters(reqObj)
+
+    def plot3DCB(self):
+        index = self.selectedIndexes()[0]
+        item = self.model.itemFromIndex(index)
+        requestData = db_lib.getRequestByID(item.data(32))
+        
+        #requestData = db_lib.getRequestByID('afe9f202-430f-4b53-89ca-8ac639f5b321', active_only=False)
+        print(requestData)
+        protocol = requestData["request_obj"]["protocol"]
+        if requestData["request_obj"].get("centeringOption") == "AutoRaster":
+            # print(requestData)
+            raster_requests = list(db_lib.request_ref.find(**{"request_obj.parentReqID": requestData["uid"]}))
+            if len(raster_requests) == 2:
+                face_on_result = next((result for result in db_lib.getResultsforRequest(raster_requests[1]['uid']) if result.get("result_type") == "rasterResult"), None)
+                face_on_matrix = get_raster_result_matrix(face_on_result["result_obj"]["rasterCellResults"]["resultObj"], raster_requests[1]["request_obj"]["rasterDef"])
+                ortho_results = next((result for result in db_lib.getResultsforRequest(raster_requests[0]['uid']) if result.get("result_type") == "rasterResult"), None)
+                ortho_matrix = get_raster_result_matrix(ortho_results["result_obj"]["rasterCellResults"]["resultObj"], raster_requests[0]["request_obj"]["rasterDef"])
+                
+                face_on_min = 0
+                #if face_on_matrix[face_on_matrix>0].size > 0:
+                #    face_on_min = np.min(face_on_matrix[face_on_matrix>0])
+                    
+                if face_on_matrix.max() - face_on_min > 0:
+                    face_on_matrix = ((face_on_matrix - face_on_min)/(face_on_matrix.max() - face_on_min) * 255)
+
+                ortho_min = 0
+                #if ortho_matrix[ortho_matrix>0].size > 0:
+                #    ortho_min = np.min(ortho_matrix[ortho_matrix>0])
+                if ortho_matrix.max() - ortho_min > 0:
+                    ortho_matrix = ((ortho_matrix - ortho_min)/(ortho_matrix.max() - ortho_min) * 255)
+
+                print(face_on_matrix.shape)
+                print(ortho_matrix.shape)
+                face_on_matrix = face_on_matrix[::-1]
+                if face_on_matrix.shape[0] != ortho_matrix.shape[0] and face_on_matrix.shape[1] != ortho_matrix.shape[1]:
+                    face_on_matrix = face_on_matrix.T
+
+                face_on_reshaped = face_on_matrix[:, np.newaxis, :]
+                ortho_reshaped = ortho_matrix[np.newaxis, :, :]
+                
+                matrix_3d  =  face_on_reshaped + ortho_reshaped 
+                matrix_3d = np.where((face_on_reshaped>0) & (ortho_reshaped>0), matrix_3d, 0)
+
+                print(f"All zeros: {np.all(matrix_3d == 0)}")
+
+                if not np.all(matrix_3d == 0):
+                    x, y, z, values, colors, pos = [], [], [], [],[], []
+
+                    # Iterate through the matrix to extract indices as coordinates and the values
+                    for i in range(matrix_3d.shape[0]):  # x coordinate
+                        for j in range(matrix_3d.shape[1]):  # y coordinate
+                            for k in range(matrix_3d.shape[2]):  # z coordinate
+                                if matrix_3d[i, j, k] > 0:
+                                    x.append(i)
+                                    y.append(j)
+                                    z.append(k)
+                                    pos.append((i, j, k))
+                                    values.append((matrix_3d[i, j, k]/255))
+                                    colors.append(matrix_3d[i, j, k])
+                    
+                    
+                    
+                    # Generating a meshgrid for the voxel positions
+                    """
+                    x, y, z = np.meshgrid(np.arange(matrix_3d.shape[0]), 
+                        np.arange(matrix_3d.shape[1]), 
+                        np.arange(matrix_3d.shape[2]), 
+                        indexing="ij")
+                    """
+                    #print(x.shape, y.shape, z.shape, matrix_3d.shape)
+                    """
+                    fig = go.Figure(data=go.Volume(
+                        x=x.flatten(),
+                        y=y.flatten(),
+                        z=z.flatten(),
+                        value=(matrix_3d).flatten(),
+                        isomin=1,
+                        isomax=np.max(matrix_3d),
+                        opacity=0.1,  # Adjust for better visualization
+                        surface_count=20,  # The number of isosurfaces, adjust for complexity of the plot
+                    ))
+                    """
+                    fig = go.Figure(data=go.Scatter3d(
+                        x=x,
+                        y=y,
+                        z=z,
+                        mode="markers",
+                        marker=dict(
+                            size=12,
+                            color=colors,                # set color to an array/list of desired values
+                            colorscale='Inferno',   # choose a colorscale
+                            opacity=0.8
+                        )
+
+                    ))
+
+                    fig.update_layout(
+                        scene=dict(
+                            xaxis_title='X Axis',
+                            yaxis_title='Y Axis',
+                            zaxis_title='Z Axis'
+                        )
+                    )
+
+                    fig.show()
+
+                else:
+                    print("All zeros not showing plot")
+                
 
     def fillToolTip(self, data):
         text = ""
