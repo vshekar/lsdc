@@ -33,6 +33,7 @@ from config_params import (
     RASTER_GUI_XREC_FILL_DELAY,
     SAMPLE_TIMER_DELAY,
     SERVER_CHECK_DELAY,
+    SET_ENERGY_CHECK,
     VALID_DET_DIST,
     VALID_EXP_TIMES,
     VALID_TOTAL_EXP_TIMES,
@@ -51,6 +52,7 @@ from gui.dialog import (
     PuckDialog,
     RasterExploreDialog,
     ScreenDefaultsDialog,
+    SetEnergyDialog,
     SnapCommentDialog,
     StaffScreenDialog,
     UserScreenDialog,
@@ -581,20 +583,28 @@ class ControlMain(QtWidgets.QMainWindow):
         )
         self.energy_ledit = self.energyMoveLedit.getEntry()
         self.energy_ledit.setValidator(QtGui.QDoubleValidator())
-        self.energy_ledit.returnPressed.connect(self.moveEnergyCB)
+        self.energy_ledit.returnPressed.connect(self.moveEnergyMaxDeltaCB)
         moveEnergyButton = QtWidgets.QPushButton("Move Energy")
         moveEnergyButton.clicked.connect(self.moveEnergyCB)
-        #hBoxColParams3.addWidget(colEnergyLabel)
-        #hBoxColParams3.addWidget(self.energyReadback)
-        #hBoxColParams3.addWidget(energySPLabel)
-        #hBoxColParams3.addWidget(self.energy_ledit)
-        #hBoxColParams22.addWidget(colTransmissionLabel)
-        #hBoxColParams22.addWidget(self.transmissionReadback_ledit)
-        #hBoxColParams22.addWidget(transmisionSPLabel)
-        #hBoxColParams22.addWidget(self.transmission_ledit)
-        #hBoxColParams22.insertSpacing(5, 100)
-        #hBoxColParams22.addWidget(beamsizeLabel)
-        #hBoxColParams22.addWidget(self.beamsizeComboBox)
+        if daq_utils.beamline != 'nyx':
+          hBoxColParams3.addWidget(colEnergyLabel)
+          hBoxColParams3.addWidget(self.energyReadback)
+          hBoxColParams3.addWidget(energySPLabel)
+          if daq_utils.beamline == "fmx":
+              if getBlConfig(SET_ENERGY_CHECK):
+                  hBoxColParams3.addWidget(moveEnergyButton)
+              else:
+                  hBoxColParams3.addWidget(self.energy_ledit)
+          else:
+              hBoxColParams3.addWidget(self.energy_ledit)
+
+          hBoxColParams22.addWidget(colTransmissionLabel)
+          hBoxColParams22.addWidget(self.transmissionReadback_ledit)
+          hBoxColParams22.addWidget(transmisionSPLabel)
+          hBoxColParams22.addWidget(self.transmission_ledit)
+          hBoxColParams22.insertSpacing(5, 100)
+          hBoxColParams22.addWidget(beamsizeLabel)
+          hBoxColParams22.addWidget(self.beamsizeComboBox)
         hBoxColParams4 = QtWidgets.QHBoxLayout()
         colBeamWLabel = QtWidgets.QLabel("Beam Width:")
         colBeamWLabel.setFixedWidth(140)
@@ -2124,6 +2134,9 @@ class ControlMain(QtWidgets.QMainWindow):
                         raster["graphicsItem"].setVisible(False)
                     else:
                         raster["graphicsItem"].setVisible(True)
+                        if raster["graphicsItem"].scene() is None:
+                            # Sometimes the item is removed from scene somewhere else
+                            self.scene.addItem(raster["graphicsItem"])
                     newY = self.calculateNewYCoordPos(startYX, startYY)
                     raster["graphicsItem"].setPos(raster["graphicsItem"].x(), newY)
 
@@ -2900,13 +2913,24 @@ class ControlMain(QtWidgets.QMainWindow):
                 {"relative": False}
             )
 
-    def moveEnergyCB(self):
+    def moveEnergyMaxDeltaCB(self, max_delta=10.0):
         energyRequest = float(str(self.energy_ledit.text()))
-        if abs(energyRequest - self.energy_pv.get()) > 10.0:
-            self.popupServerMessage("Energy change must be less than 10 ev")
-            return
+        if self.controlEnabled():
+            if abs(energyRequest - self.energy_pv.get()) > max_delta:
+                self.popupServerMessage(f"Energy change must be less than or equal to {max_delta:.2f} ev")
+                return
+            else:
+                self.send_to_server("mvaDescriptor", ["energy", float(self.energy_ledit.text())])
+                comm_s = 'mvaDescriptor("energy",' + str(self.energy_ledit.text()) + ")"
+                logger.info(comm_s)
         else:
-            self.send_to_server("mvaDescriptor", ["energy", float(self.energy_ledit.text())])
+            self.popupServerMessage("You don't have control")
+
+    def moveEnergyCB(self):
+        if self.controlEnabled():
+            set_energy = SetEnergyDialog(parent=self)
+        else:
+            self.popupServerMessage("You don't have control")
 
     def setLifetimeCB(self, lifetime):
         if hasattr(self, "sampleLifetimeReadback_ledit"):
@@ -5586,6 +5610,11 @@ class ControlMain(QtWidgets.QMainWindow):
         print(message_s)
 
     def colorProgramState(self, programState_s):
+        if programState_s == "Setting Energy":
+            self.setEnabled(False)
+        else:
+            self.setEnabled(True)
+
         if programState_s.find("Ready") == -1:
             self.statusLabel.setColor("yellow")
         else:
