@@ -972,7 +972,7 @@ class ControlMain(QtWidgets.QMainWindow):
         self.timerSample.start(SAMPLE_TIMER_DELAY)
 
         self.centeringMarksList = []
-        self.rasterList = []
+        self.rasterList: "dict[str, RasterGroup]" = {}
         self.rasterDefList = []
         self.polyPointItems = []
         self.rasterPoly = None
@@ -1237,9 +1237,6 @@ class ControlMain(QtWidgets.QMainWindow):
         self.vidActionRasterExploreRadio.setChecked(False)
         self.vidActionRasterExploreRadio.toggled.connect(self.vidActionToggledCB)
         self.vidActionRadioGroup.addButton(self.vidActionRasterExploreRadio)
-        self.vidActionRasterSelectRadio = QtWidgets.QRadioButton("Raster Select")
-        self.vidActionRasterSelectRadio.setChecked(False)
-        self.vidActionRasterSelectRadio.toggled.connect(self.vidActionToggledCB)
         self.vidActionRasterDefRadio = QtWidgets.QRadioButton("Define Raster")
         self.vidActionRasterDefRadio.setChecked(False)
         self.vidActionRasterDefRadio.setEnabled(False)
@@ -1512,22 +1509,6 @@ class ControlMain(QtWidgets.QMainWindow):
             self.beamHeight_ledit.setText(str(cellSize))
 
     def vidActionToggledCB(self):
-        if len(self.rasterList) > 0:
-            if self.vidActionRasterSelectRadio.isChecked():
-                for i in range(len(self.rasterList)):
-                    if self.rasterList[i] != None:
-                        self.rasterList[i]["graphicsItem"].setFlag(
-                            QtWidgets.QGraphicsItem.ItemIsSelectable, True
-                        )
-            else:
-                for i in range(len(self.rasterList)):
-                    if self.rasterList[i] != None:
-                        self.rasterList[i]["graphicsItem"].setFlag(
-                            QtWidgets.QGraphicsItem.ItemIsMovable, False
-                        )
-                        self.rasterList[i]["graphicsItem"].setFlag(
-                            QtWidgets.QGraphicsItem.ItemIsSelectable, False
-                        )
         if self.vidActionRasterDefRadio.isChecked():
             self.click_positions = []
             self.showProtParams()
@@ -1551,42 +1532,32 @@ class ControlMain(QtWidgets.QMainWindow):
             * daq_utils.unitScaling
         )
         self.imageScaleText.setText(str(imageScaleMicrons) + " microns")
-        if self.rasterList != []:
+        if self.rasterList:
             saveRasterList = self.rasterList
             self.eraseDisplayCB()
-            for i in range(len(saveRasterList)):
-                if saveRasterList[i] == None:
-                    self.rasterList.append(None)
-                else:
-                    rasterXPixels = float(saveRasterList[i]["graphicsItem"].x())
-                    rasterYPixels = float(saveRasterList[i]["graphicsItem"].y())
-                    self.rasterXmicrons = rasterXPixels * (
-                        fov["x"] / daq_utils.screenPixX
+            for uid, raster in saveRasterList.items():
+                self.rasterList[uid] = saveRasterList[uid]
+                rasterXPixels = float(raster.x())
+                rasterYPixels = float(raster.y())
+                self.rasterXmicrons = rasterXPixels * (
+                    fov["x"] / daq_utils.screenPixX
+                )
+                self.rasterYmicrons = rasterYPixels * (
+                    fov["y"] / daq_utils.screenPixY
+                )
+                if not self.hideRastersCheckBox.isChecked():
+                    raster_req = db_lib.getRequestByID(uid)
+                    self.drawPolyRaster(
+                        raster_req,
+                        raster.raster_def["x"],
+                        raster.raster_def["y"],
+                        raster.raster_def["z"],
                     )
-                    self.rasterYmicrons = rasterYPixels * (
-                        fov["y"] / daq_utils.screenPixY
-                    )
-                    if not self.hideRastersCheckBox.isChecked():
-                        self.drawPolyRaster(
-                            db_lib.getRequestByID(saveRasterList[i]["uid"]),
-                            saveRasterList[i]["coords"]["x"],
-                            saveRasterList[i]["coords"]["y"],
-                            saveRasterList[i]["coords"]["z"],
-                        )
-                        self.fillPolyRaster(
-                            db_lib.getRequestByID(saveRasterList[i]["uid"])
-                        )
-                    self.processSampMove(self.sampx_pv.get(), "x")
-                    self.processSampMove(self.sampy_pv.get(), "y")
-                    self.processSampMove(self.sampz_pv.get(), "z")
-        if self.vector_widget.vector_start != None:
-            self.processSampMove(self.sampx_pv.get(), "x")
-            self.processSampMove(self.sampy_pv.get(), "y")
-            self.processSampMove(self.sampz_pv.get(), "z")
-        if self.centeringMarksList != []:
-            self.processSampMove(self.sampx_pv.get(), "x")
-            self.processSampMove(self.sampy_pv.get(), "y")
-            self.processSampMove(self.sampz_pv.get(), "z")
+                    self.fillPolyRaster(raster_req)
+        self.processSampMove(self.sampx_pv.get(), "x")
+        self.processSampMove(self.sampy_pv.get(), "y")
+        self.processSampMove(self.sampz_pv.get(), "z")
+
 
     def flushBuffer(self, vidStream):
         if vidStream == None:
@@ -1969,37 +1940,35 @@ class ControlMain(QtWidgets.QMainWindow):
                     mark["graphicsItem"].setPos(
                         mark["graphicsItem"].x(), newY - centerMarkerOffsetY
                     )
-        if self.rasterList:
-            for raster in self.rasterList:
-                if raster is None:
-                    continue
-                startX = raster["coords"]["x"]
-                startYY = raster["coords"]["z"]
-                startYX = raster["coords"]["y"]
-                if motID == "x":
-                    delta = startX - posRBV
-                    newX = float(self.screenXmicrons2pixels(delta))
-                    raster["graphicsItem"].setPos(newX, raster["graphicsItem"].y())
-                if motID == "y" or motID == "z":
-                    newY = self.calculateNewYCoordPos(startYX, startYY)
-                    raster["graphicsItem"].setPos(raster["graphicsItem"].x(), newY)
-                if motID == "fineX":
-                    delta = startX - posRBV - self.motPos["x"]
-                    newX = float(self.screenXmicrons2pixels(delta))
-                    raster["graphicsItem"].setPos(newX, raster["graphicsItem"].y())
-                if motID == "fineY" or motID == "fineZ":
-                    newY = self.calculateNewYCoordPos(startYX, startYY)
-                    raster["graphicsItem"].setPos(raster["graphicsItem"].x(), newY)
-                if motID == "omega":
-                    if abs(posRBV - raster["coords"]["omega"]) % 360.0 > 5.0:
-                        raster["graphicsItem"].setVisible(False)
-                    else:
-                        raster["graphicsItem"].setVisible(True)
-                        if raster["graphicsItem"].scene() is None:
-                            # Sometimes the item is removed from scene somewhere else
-                            self.scene.addItem(raster["graphicsItem"])
-                    newY = self.calculateNewYCoordPos(startYX, startYY)
-                    raster["graphicsItem"].setPos(raster["graphicsItem"].x(), newY)
+        
+        for raster in self.rasterList.values():
+            startX = raster.raster_def["x"]
+            startYY = raster.raster_def["z"]
+            startYX = raster.raster_def["y"]
+            if motID == "x":
+                delta = startX - posRBV
+                newX = float(self.screenXmicrons2pixels(delta))
+                raster.setPos(newX, raster.y())
+            if motID == "y" or motID == "z":
+                newY = self.calculateNewYCoordPos(startYX, startYY)
+                raster.setPos(raster.x(), newY)
+            if motID == "fineX":
+                delta = startX - posRBV - self.motPos["x"]
+                newX = float(self.screenXmicrons2pixels(delta))
+                raster.setPos(newX, raster.y())
+            if motID == "fineY" or motID == "fineZ":
+                newY = self.calculateNewYCoordPos(startYX, startYY)
+                raster.setPos(raster.x(), newY)
+            if motID == "omega":
+                if abs(posRBV - raster.raster_def["omega"]) % 360.0 > 5.0:
+                    raster.setVisible(False)
+                else:
+                    raster.setVisible(True)
+                    if raster.scene() is None:
+                        # Sometimes the item is removed from scene somewhere else
+                        self.scene.addItem(raster)
+                newY = self.calculateNewYCoordPos(startYX, startYY)
+                raster.setPos(raster.x(), newY)
 
         offset = (self.centerMarkerCharOffsetX, self.centerMarkerCharOffsetY)
         self.vector_widget.update_vector(posRBV, motID, self.centerMarker.pos(), offset)
@@ -2016,9 +1985,8 @@ class ControlMain(QtWidgets.QMainWindow):
     def displayXrecRaster(self, xrecRasterFlag):
         self.xrecRasterFlag_pv.put("0")
         if xrecRasterFlag == "100":
-            for i in range(len(self.rasterList)):
-                if self.rasterList[i] != None:
-                    self.scene.removeItem(self.rasterList[i]["graphicsItem"])
+            for raster in self.rasterList.values():
+                self.scene.removeItem(raster)
         else:
             logger.info("xrecrasterflag = %s" % xrecRasterFlag)
             try:
@@ -2956,16 +2924,11 @@ class ControlMain(QtWidgets.QMainWindow):
             db_lib.deleteRequest(rasterReq["uid"])
             return
         
-        rasterListIndex = 0
-        for i in range(len(self.rasterList)):
-            if self.rasterList[i] != None:
-                if self.rasterList[i]["uid"] == rasterReq["uid"]:
-                    rasterListIndex = i
         if rasterResult == {}:
             return
 
         try:
-            currentRasterGroup = self.rasterList[rasterListIndex]["graphicsItem"]
+            currentRasterGroup = self.rasterList[rasterReq["uid"]]
         except IndexError as e:
             logger.error("IndexError while getting raster group: %s" % e)
             return
@@ -3106,10 +3069,9 @@ class ControlMain(QtWidgets.QMainWindow):
 
     def reFillPolyRaster(self):
         rasterEvalOption = str(self.rasterEvalComboBox.currentText())
-        for i in range(len(self.rasterList)):
-            if self.rasterList[i] != None:
-                currentRasterGroup = self.rasterList[i]["graphicsItem"]
-                currentRasterCellList = currentRasterGroup.childItems()
+        for raster in self.rasterList.values():
+            if raster is not None:
+                currentRasterCellList = raster.childItems()
                 my_array = np.zeros(len(currentRasterCellList))
                 for i in range(
                     0, len(currentRasterCellList)
@@ -3207,11 +3169,11 @@ class ControlMain(QtWidgets.QMainWindow):
         self.send_to_server("backlightDimmer")
 
     def eraseRastersCB(self):
-        if self.rasterList != []:
-            for i in range(len(self.rasterList)):
-                if self.rasterList[i] != None:
-                    self.scene.removeItem(self.rasterList[i]["graphicsItem"])
-            self.rasterList = []
+        if self.rasterList:
+            for raster in self.rasterList.values():
+                if raster is not None:
+                    self.scene.removeItem(raster)
+            self.rasterList = {}
             self.rasterDefList = []
             self.currentRasterCellList = []
 
@@ -3225,28 +3187,19 @@ class ControlMain(QtWidgets.QMainWindow):
         for i in range(len(self.polyPointItems)):
             self.scene.removeItem(self.polyPointItems[i])
         self.polyPointItems = []
-        if self.rasterList != []:
-            for i in range(len(self.rasterList)):
-                if self.rasterList[i] != None:
-                    self.scene.removeItem(self.rasterList[i]["graphicsItem"])
-            self.rasterList = []
-            self.rasterDefList = []
-            self.currentRasterCellList = []
+        self.eraseRastersCB()
         self.clearVectorCB()
-        if self.rasterPoly != None:
+        if self.rasterPoly is not None:
             self.scene.removeItem(self.rasterPoly)
         self.rasterPoly = None
 
     def eraseDisplayCB(
         self,
     ):  # use this for things like zoom change. This is not the same as getting rid of all rasters.
-        if self.rasterList != []:
-            for i in range(len(self.rasterList)):
-                if self.rasterList[i] != None:
-                    self.scene.removeItem(self.rasterList[i]["graphicsItem"])
-            self.rasterList = []
-            return  # short circuit
-        if self.rasterPoly != None:
+        for raster in self.rasterList.values():
+            self.scene.removeItem(raster)
+        self.rasterList = {}
+        if self.rasterPoly is not None:
             self.scene.removeItem(self.rasterPoly)
 
     def getCurrentFOV(self):
@@ -3417,10 +3370,8 @@ class ControlMain(QtWidgets.QMainWindow):
         return  # short circuit
 
     def rasterIsDrawn(self, rasterReq):
-        for i in range(len(self.rasterList)):
-            if self.rasterList[i] != None:
-                if self.rasterList[i]["uid"] == rasterReq["uid"]:
-                    return True
+        if rasterReq["uid"] in self.rasterList:
+            return True
         return False
 
     def drawPolyRaster(
@@ -3489,21 +3440,11 @@ class ControlMain(QtWidgets.QMainWindow):
                 newRasterCellList.append(newCell)
                 newCell.setPen(pen)
                 rowCellCount = rowCellCount + 1  # really just for test of new row
-        newItemGroup = RasterGroup(self)
+        newItemGroup = RasterGroup(self, raster_def=rasterDef)
         self.scene.addItem(newItemGroup)
         for i in range(len(newRasterCellList)):
             newItemGroup.addToGroup(newRasterCellList[i])
-        newRasterGraphicsDesc = {
-            "uid": rasterReq["uid"],
-            "coords": {
-                "x": rasterDef["x"],
-                "y": rasterDef["y"],
-                "z": rasterDef["z"],
-                "omega": rasterDef["omega"],
-            },
-            "graphicsItem": newItemGroup,
-        }
-        self.rasterList.append(newRasterGraphicsDesc)
+        self.rasterList[rasterReq["uid"]] = newItemGroup
 
     def timerSampleRefresh(self):
         if self.capture is None:
@@ -3527,18 +3468,18 @@ class ControlMain(QtWidgets.QMainWindow):
             event.key() == QtCore.Qt.Key_Delete
             or event.key() == QtCore.Qt.Key_Backspace
         ):
-            for i in range(len(self.rasterList)):
-                if self.rasterList[i] != None:
-                    if self.rasterList[i]["graphicsItem"].isSelected():
+            for uid, raster in self.rasterList.items():
+                if raster is not None:
+                    if raster.isSelected():
                         try:
-                            sceneReq = db_lib.getRequestByID(self.rasterList[i]["uid"])
-                            if sceneReq != None:
+                            sceneReq = db_lib.getRequestByID(uid)
+                            if sceneReq is not None:
                                 self.selectedSampleID = sceneReq["sample"]
                                 db_lib.deleteRequest(sceneReq)["uid"]
                         except AttributeError:
                             pass
-                        self.scene.removeItem(self.rasterList[i]["graphicsItem"])
-                        self.rasterList[i] = None
+                        self.scene.removeItem(raster)
+                        self.rasterList.pop(uid, None)
                         self.treeChanged_pv.put(1)
             for i in range(len(self.centeringMarksList)):
                 if self.centeringMarksList[i] != None:

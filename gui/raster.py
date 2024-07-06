@@ -1,11 +1,11 @@
 import logging
-import typing
+from typing import TYPE_CHECKING, Optional, Dict, Any
 
 from qtpy import QtCore, QtWidgets
 
 from gui.albula.interface import AlbulaInterface
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     from lsdcGui import ControlMain
 
 logger = logging.getLogger()
@@ -24,12 +24,55 @@ def isInCell(position, item):
 
 
 class RasterGroup(QtWidgets.QGraphicsItemGroup):
-    def __init__(self, parent: "ControlMain"):
+    def __init__(self, parent: "ControlMain", raster_def: Optional[Dict[Any, Any]]):
         super(RasterGroup, self).__init__()
         self.parent = parent
         self.setAcceptHoverEvents(True)
         self.currentSelectedCell = None
         self.albulaInterface = AlbulaInterface()
+        self.setFlag(QtWidgets.QGraphicsItem.ItemIsMovable, False)
+        self.setFlag(QtWidgets.QGraphicsItem.ItemIsSelectable, False)
+        if raster_def:
+            self.raster_def = raster_def
+            self.draw_raster()
+
+    def add_cells(self, cells: list[RasterCell]):
+        for cell in cells:
+            self.addToGroup(cell)
+    
+    def draw_raster(self):
+        stepsizeX = self.parent.screenXmicrons2pixels(self.raster_def["stepsize"])
+        stepsizeY = self.parent.screenYmicrons2pixels(self.raster_def["stepsize"])
+        # pen = QtGui.QPen(QtCore.Qt.red)
+        newRasterCellList = []
+        offset = {
+            "x": self.parent.centerMarker.x() + self.parent.centerMarkerCharOffsetX,
+            "y": self.parent.centerMarker.y() + self.parent.centerMarkerCharOffsetY,
+        }
+        for i in range(len(self.raster_def["rowDefs"])):
+            newCellX = (
+                self.parent.screenXmicrons2pixels(self.raster_def["rowDefs"][i]["start"]["x"])
+                + offset["x"]
+            )
+            newCellY = (
+                self.parent.screenYmicrons2pixels(self.raster_def["rowDefs"][i]["start"]["y"])
+                + offset["y"]
+            )
+            
+            
+            for j in range(self.raster_def["rowDefs"][i]["numsteps"]):
+                if (
+                self.raster_def["rowDefs"][0]["start"]["y"]
+                == self.raster_def["rowDefs"][0]["end"]["y"]
+                ):  # this is a horizontal raster
+                    newCellX += stepsizeX
+                else:
+                    newCellY += stepsizeY
+
+                newCell = RasterCell(
+                    int(newCellX), int(newCellY), stepsizeX, stepsizeY, self
+                )
+                newRasterCellList.append(newCell)
 
     def mousePressEvent(self, e):
         for i in range(len(self.parent.rasterList)):
