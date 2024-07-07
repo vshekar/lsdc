@@ -1546,14 +1546,9 @@ class ControlMain(QtWidgets.QMainWindow):
                     fov["y"] / daq_utils.screenPixY
                 )
                 if not self.hideRastersCheckBox.isChecked():
-                    raster_req = db_lib.getRequestByID(uid)
-                    self.drawPolyRaster(
-                        raster_req,
-                        raster.raster_def["x"],
-                        raster.raster_def["y"],
-                        raster.raster_def["z"],
-                    )
-                    self.fillPolyRaster(raster_req)
+                    # raster_req = db_lib.getRequestByID(uid)
+                    self.drawPolyRaster(raster.raster_req)
+                    self.fillPolyRaster(raster.raster_req)
         self.processSampMove(self.sampx_pv.get(), "x")
         self.processSampMove(self.sampy_pv.get(), "y")
         self.processSampMove(self.sampz_pv.get(), "z")
@@ -3375,7 +3370,7 @@ class ControlMain(QtWidgets.QMainWindow):
         return False
 
     def drawPolyRaster(
-        self, rasterReq, x=-1, y=-1, z=-1
+        self, rasterReq
     ):  # rasterDef in microns,offset from center, need to convert to pixels to draw, mainly this is for displaying autoRasters, but also called in zoom change
         try:
             rasterDef = rasterReq["request_obj"]["rasterDef"]
@@ -3440,7 +3435,7 @@ class ControlMain(QtWidgets.QMainWindow):
                 newRasterCellList.append(newCell)
                 newCell.setPen(pen)
                 rowCellCount = rowCellCount + 1  # really just for test of new row
-        newItemGroup = RasterGroup(self, raster_def=rasterDef)
+        newItemGroup = RasterGroup(self, raster_req=rasterReq)
         self.scene.addItem(newItemGroup)
         for i in range(len(newRasterCellList)):
             newItemGroup.addToGroup(newRasterCellList[i])

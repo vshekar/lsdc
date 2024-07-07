@@ -24,7 +24,7 @@ def isInCell(position, item):
 
 
 class RasterGroup(QtWidgets.QGraphicsItemGroup):
-    def __init__(self, parent: "ControlMain", raster_def: Optional[Dict[Any, Any]]):
+    def __init__(self, parent: "ControlMain", raster_req:"Optional[Dict[Any, Any]]"=None):
         super(RasterGroup, self).__init__()
         self.parent = parent
         self.setAcceptHoverEvents(True)
@@ -32,8 +32,9 @@ class RasterGroup(QtWidgets.QGraphicsItemGroup):
         self.albulaInterface = AlbulaInterface()
         self.setFlag(QtWidgets.QGraphicsItem.ItemIsMovable, False)
         self.setFlag(QtWidgets.QGraphicsItem.ItemIsSelectable, False)
-        if raster_def:
-            self.raster_def = raster_def
+        if raster_req:
+            self.raster_req = raster_req
+            self.raster_def = raster_req["request_obj"]["rasterDef"]
             self.draw_raster()
 
     def add_cells(self, cells: list[RasterCell]):
