@@ -7,7 +7,7 @@ from bluesky.preprocessors import finalize_decorator
 from bluesky.utils import FailedStatus
 from ophyd.utils import WaitTimeoutError
 from scipy.interpolate import interp1d
-
+from sklearn.linear_model import LinearRegression, RANSACRegressor
 import gov_lib
 from mxbluesky.devices.top_align import GovernorError, CamMode
 from mxbluesky.plans.utils import mv_with_retry, mvr_with_retry
@@ -42,20 +42,26 @@ def inner_pseudo_fly_scan(*args, **kwargs):
     d = np.pi / 180
 
     # rot axis calculation, use linear regression
-    A_rot = np.matrix(
-        [[np.cos(omega * d), np.sin(omega * d), 1] for omega in omegas]
-    )
+    omegas_rad = np.array(omegas) * d
+    X = np.vstack([np.cos(omegas_rad), np.sin(omegas_rad)]).T
 
-    b_rot = db[scan_uid].table()[top_aligner_fast.topcam.out9_buffer.name][
+    y = np.array(db[scan_uid].table()[top_aligner_fast.topcam.out9_buffer.name][
         1
-    ]
-    p = (
-        np.linalg.inv(A_rot.transpose() * A_rot)
-        * A_rot.transpose()
-        * np.matrix(b_rot).transpose()
-    )
+    ]).reshape(-1,1)
+    try:
+        ransac_kwargs = {
+            'estimator': LinearRegression(),
+            'min_samples': 5,
+            'residual_threshold': 10,
+            'random_state': 0,
+        }
+        delta_z_pix, delta_y_pix = fit_ransac_linear(X, y, **ransac_kwargs)
+    except ValueError as e:
+        logger.error(f"Error using RANSAC estimator: {e}. Using linear instead")
+        delta_z_pix, delta_y_pix = fit_linear(X, y)
 
-    delta_z_pix, delta_y_pix, rot_axis_pix = p[0], p[1], p[2]
+    print(f"Ransac Regression predictions: {delta_z_pix}, {delta_y_pix}")
+    
     delta_y, delta_z = (
         delta_y_pix / top_aligner_fast.topcam.pix_per_um.get(),
         delta_z_pix / top_aligner_fast.topcam.pix_per_um.get(),
@@ -85,7 +91,6 @@ def setup_transition_signals(target_state, zebra_dir, cam_mode):
     yield from bps.abs_set(top_aligner_fast.zebra.pos_capt.direction, zebra_dir, wait=True, timeout=4)
     yield from bps.abs_set(top_aligner_fast.topcam.cam_mode, cam_mode, wait=True, timeout=4)
     yield from bps.sleep(0.1)
-
 
 @finalize_decorator(cleanup_topcam)
 def topview_optimized():
@@ -195,3 +200,18 @@ def set_SA_work_pos(delta_y, delta_z, current_y=None, current_z= None, omega=0):
         work_pos.gpz, current_z - delta_z, wait=True
     )
     yield from bps.abs_set(work_pos.o, omega, wait=True)
+
+def fit_linear(X,y):
+    reg = LinearRegression().fit(X,y)
+    return reg.coef_[0]
+
+def fit_ransac_linear(X,y, min_n_inliers=10, **kwargs):
+    reg = RANSACRegressor(**kwargs).fit(X,y)
+    mask = reg.inlier_mask_
+    masked_X = X[mask, :]
+    masked_y = y[mask, :]
+    if len(masked_y) < min_n_inliers:
+        raise ValueError(
+            f'Too few inliers. Identified {len(masked_y)}, need {min_n_inliers}.'
+        )
+    return reg.estimator_.coef_[0]
