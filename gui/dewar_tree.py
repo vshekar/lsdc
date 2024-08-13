@@ -134,7 +134,7 @@ class DewarTree(QtWidgets.QTreeView):
             super(DewarTree, self).keyPressEvent(event)
 
     def refreshTree(self):
-        self.parent.dewarViewToggleCheckCB()
+        self.refreshTreeDewarView()
 
     def set_mounted_sample(self, item):
         # Formats the text of the item that is passed in as the mounted sample
@@ -316,102 +316,6 @@ class DewarTree(QtWidgets.QTreeView):
             col_item.setBackground(QtGui.QColor("white"))
         col_item.setToolTip(self.fillToolTip(request))
         return col_item
-
-    def refreshTreePriorityView(
-        self,
-    ):  # "item" is a sample, "col_items" are requests which are children of samples.
-        collectionRunning = False
-        selectedIndex = None
-        mountedIndex = None
-        selectedSampleIndex = None
-        self.model.clear()
-        self.orderedRequests = db_lib.getOrderedRequestList(daq_utils.beamline)
-        dewarContents = db_lib.getContainerByName(
-            daq_utils.primaryDewarName, daq_utils.beamline
-        )["content"]
-        maxPucks = len(dewarContents)
-        requestedSampleList = []
-        mountedPin = self.parent.mountedPin_pv.get()
-        for i in range(
-            len(self.orderedRequests)
-        ):  # I need a list of samples for parent nodes
-            if self.orderedRequests[i]["sample"] not in requestedSampleList:
-                requestedSampleList.append(self.orderedRequests[i]["sample"])
-        for i in range(len(requestedSampleList)):
-            sample = db_lib.getSampleByID(requestedSampleList[i])
-            owner = sample["owner"]
-            parentItem = self.model.invisibleRootItem()
-            nodeString = str(db_lib.getSampleNamebyID(requestedSampleList[i]))
-            item = QtGui.QStandardItem(
-                QtGui.QIcon(ICON),
-                nodeString,
-            )
-            item.setData(requestedSampleList[i], 32)
-            item.setData("sample", 33)
-            if requestedSampleList[i] == mountedPin:
-                self.set_mounted_sample(item)
-            parentItem.appendRow(item)
-            if requestedSampleList[i] == mountedPin:
-                mountedIndex = self.model.indexFromItem(item)
-            if (
-                requestedSampleList[i] == self.parent.selectedSampleID
-            ):  # looking for the selected item
-                selectedSampleIndex = self.model.indexFromItem(item)
-            parentItem = item
-            for k in range(len(self.orderedRequests)):
-                if self.orderedRequests[k]["sample"] == requestedSampleList[i]:
-                    col_item = QtGui.QStandardItem(
-                        QtGui.QIcon(ICON),
-                        self.orderedRequests[k]["request_obj"]["file_prefix"]
-                        + "_"
-                        + self.orderedRequests[k]["request_obj"]["protocol"],
-                    )
-                    col_item.setData(self.orderedRequests[k]["uid"], 32)
-                    col_item.setData("request", 33)
-                    col_item.setFlags(
-                        Qt.ItemIsUserCheckable
-                        | Qt.ItemIsEnabled
-                        | Qt.ItemIsEditable
-                        | Qt.ItemIsSelectable
-                    )
-                    if self.orderedRequests[k]["priority"] == 99999:
-                        col_item.setCheckState(Qt.Checked)
-                        col_item.setBackground(QtGui.QColor("green"))
-                        collectionRunning = True
-                        self.parent.refreshCollectionParams(
-                            self.orderedRequests[k], validate_hdf5=False
-                        )
-
-                    elif self.orderedRequests[k]["priority"] > 0:
-                        col_item.setCheckState(Qt.Checked)
-                        col_item.setBackground(QtGui.QColor("white"))
-                    elif self.orderedRequests[k]["priority"] < 0:
-                        col_item.setCheckable(False)
-                        col_item.setBackground(QtGui.QColor("cyan"))
-                    else:
-                        col_item.setCheckState(Qt.Unchecked)
-                        col_item.setBackground(QtGui.QColor("white"))
-                    item.appendRow(col_item)
-                    if (
-                        self.orderedRequests[k]["uid"] == self.parent.SelectedItemData
-                    ):  # looking for the selected item
-                        selectedIndex = self.model.indexFromItem(col_item)
-        self.setModel(self.model)
-        if selectedSampleIndex != None and collectionRunning == False:
-            self.setCurrentIndex(selectedSampleIndex)
-            self.parent.row_clicked(selectedSampleIndex)
-        elif selectedSampleIndex == None and collectionRunning == False:
-            if mountedIndex != None:
-                self.setCurrentIndex(mountedIndex)
-                self.parent.row_clicked(mountedIndex)
-        else:
-            pass
-
-        if selectedIndex != None and collectionRunning == False:
-            self.setCurrentIndex(selectedIndex)
-            self.parent.row_clicked(selectedIndex)
-        self.scrollTo(self.currentIndex(), QtWidgets.QAbstractItemView.PositionAtCenter)
-        self.expandAll()
 
     def queueSelectedSample(self, item):
         if item.data(33) == "request":

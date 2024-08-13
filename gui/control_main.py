@@ -320,22 +320,7 @@ class ControlMain(QtWidgets.QMainWindow):
         treeSelectMode = QtWidgets.QAbstractItemView.ExtendedSelection
         self.dewarTree.setSelectionMode(treeSelectMode)
         self.dewarTree.setSelectionBehavior(treeSelectBehavior)
-        hBoxRadioLayout1 = QtWidgets.QHBoxLayout()
-        self.viewRadioGroup = QtWidgets.QButtonGroup()
-        self.priorityViewRadio = QtWidgets.QRadioButton("PriorityView")
-        self.priorityViewRadio.toggled.connect(
-            functools.partial(self.dewarViewToggledCB, "priorityView")
-        )
-        self.viewRadioGroup.addButton(self.priorityViewRadio)
-        self.dewarViewRadio = QtWidgets.QRadioButton("DewarView")
-        self.dewarViewRadio.setChecked(True)
-        self.dewarViewRadio.toggled.connect(
-            functools.partial(self.dewarViewToggledCB, "dewarView")
-        )
-        hBoxRadioLayout1.addWidget(self.dewarViewRadio)
-        hBoxRadioLayout1.addWidget(self.priorityViewRadio)
-        self.viewRadioGroup.addButton(self.dewarViewRadio)
-        vBoxDFlayout.addLayout(hBoxRadioLayout1)
+
         vBoxDFlayout.addWidget(self.dewarTree)
         queueSelectedButton = QtWidgets.QPushButton("Queue All Selected")
         queueSelectedButton.clicked.connect(self.dewarTree.queueAllSelectedCB)
@@ -914,21 +899,6 @@ class ControlMain(QtWidgets.QMainWindow):
         editSampleButton.clicked.connect(self.editSelectedRequestsCB)
         cloneRequestButton = QtWidgets.QPushButton("Clone Raster Request")
         cloneRequestButton.clicked.connect(self.cloneRequestCB)
-        hBoxPriorityLayout1 = QtWidgets.QHBoxLayout()
-        priorityEditLabel = QtWidgets.QLabel("Priority Edit")
-        priorityTopButton = QtWidgets.QPushButton("   >>   ")
-        priorityUpButton = QtWidgets.QPushButton("   >    ")
-        priorityDownButton = QtWidgets.QPushButton("   <    ")
-        priorityBottomButton = QtWidgets.QPushButton("   <<   ")
-        priorityTopButton.clicked.connect(self.topPriorityCB)
-        priorityBottomButton.clicked.connect(self.bottomPriorityCB)
-        priorityUpButton.clicked.connect(self.upPriorityCB)
-        priorityDownButton.clicked.connect(self.downPriorityCB)
-        hBoxPriorityLayout1.addWidget(priorityEditLabel)
-        hBoxPriorityLayout1.addWidget(priorityBottomButton)
-        hBoxPriorityLayout1.addWidget(priorityDownButton)
-        hBoxPriorityLayout1.addWidget(priorityUpButton)
-        hBoxPriorityLayout1.addWidget(priorityTopButton)
         queueSampleButton = QtWidgets.QPushButton("Add Requests to Queue")
         queueSampleButton.clicked.connect(self.addRequestsToAllSelectedCB)
         deleteSampleButton = QtWidgets.QPushButton("Delete Requests")
@@ -938,7 +908,6 @@ class ControlMain(QtWidgets.QMainWindow):
         editScreenParamsButton = QtWidgets.QPushButton("Edit Raster Params...")
         editScreenParamsButton.clicked.connect(self.editScreenParamsCB)
         vBoxMainSetup.addWidget(self.mainToolBox)
-        vBoxMainSetup.addLayout(hBoxPriorityLayout1)
         vBoxMainSetup.addWidget(queueSampleButton)
         vBoxMainSetup.addWidget(editSampleButton)
         vBoxMainSetup.addWidget(cloneRequestButton)
@@ -2606,79 +2575,7 @@ class ControlMain(QtWidgets.QMainWindow):
     def setExpertModeCB(self):
         self.vidActionDefineCenterRadio.setEnabled(True)
 
-    def upPriorityCB(
-        self,
-    ):  # neither of these are very elegant, and might even be glitchy if overused
-        currentPriority = self.selectedSampleRequest["priority"]
-        if currentPriority < 1:
-            return
-        orderedRequests = db_lib.getOrderedRequestList(daq_utils.beamline)
-        for i in range(len(orderedRequests)):
-            if orderedRequests[i]["sample"] == self.selectedSampleRequest["sample"]:
-                if i < 2:
-                    self.topPriorityCB()
-                else:
-                    priority = (
-                        orderedRequests[i - 2]["priority"]
-                        + orderedRequests[i - 1]["priority"]
-                    ) / 2
-                    if currentPriority == priority:
-                        priority = priority + 20
-                    db_lib.updatePriority(self.selectedSampleRequest["uid"], priority)
-        self.treeChanged_pv.put(1)
-
-    def downPriorityCB(self):
-        currentPriority = self.selectedSampleRequest["priority"]
-        if currentPriority < 1:
-            return
-        orderedRequests = db_lib.getOrderedRequestList(daq_utils.beamline)
-        for i in range(len(orderedRequests)):
-            if orderedRequests[i]["sample"] == self.selectedSampleRequest["sample"]:
-                if (len(orderedRequests) - i) < 3:
-                    self.bottomPriorityCB()
-                else:
-                    priority = (
-                        orderedRequests[i + 1]["priority"]
-                        + orderedRequests[i + 2]["priority"]
-                    ) / 2
-                    if currentPriority == priority:
-                        priority = priority - 20
-                    db_lib.updatePriority(self.selectedSampleRequest["uid"], priority)
-        self.treeChanged_pv.put(1)
-
-    def topPriorityCB(self):
-        currentPriority = self.selectedSampleRequest["priority"]
-        if currentPriority < 1:
-            return
-        priority = int(self.getMaxPriority())
-        priority = priority + 100
-        db_lib.updatePriority(self.selectedSampleRequest["uid"], priority)
-        self.treeChanged_pv.put(1)
-
-    def bottomPriorityCB(self):
-        currentPriority = self.selectedSampleRequest["priority"]
-        if currentPriority < 1:
-            return
-        priority = int(self.getMinPriority())
-        priority = priority - 100
-        db_lib.updatePriority(self.selectedSampleRequest["uid"], priority)
-        self.treeChanged_pv.put(1)
-
-    def dewarViewToggledCB(self, identifier):
-        self.selectedSampleRequest = {}
-        # should probably clear textfields here too
-        if identifier == "dewarView":
-            if self.dewarViewRadio.isChecked():
-                self.dewarTree.refreshTreeDewarView()
-        else:
-            if self.priorityViewRadio.isChecked():
-                self.dewarTree.refreshTreePriorityView()
-
-    def dewarViewToggleCheckCB(self):
-        if self.dewarViewRadio.isChecked():
-            self.dewarTree.refreshTreeDewarView()
-        else:
-            self.dewarTree.refreshTreePriorityView()
+    
 
     def moveOmegaCB(self):
         self.send_to_server(
