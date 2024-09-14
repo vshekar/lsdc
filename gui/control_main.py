@@ -110,6 +110,8 @@ def get_request_object_escan(
     reqObj["stepsize"] = float(stepsize)
     return reqObj
 
+class SignalEmitter(QtCore.QObject):
+    update_vector_labels = QtCore.Signal(int, int)
 
 class ControlMain(QtWidgets.QMainWindow):
     # 1/13/15 - are these necessary?
@@ -149,9 +151,11 @@ class ControlMain(QtWidgets.QMainWindow):
     lowMagCursorChangeSignal = QtCore.Signal(int, str)
     cryostreamTempSignal = QtCore.Signal(object)
     sampleZoomChangeSignal = QtCore.Signal(object)
+    updateVectorLengthAndSpeedSignal = QtCore.Signal(float, float)
 
     def __init__(self):
         super(ControlMain, self).__init__()
+        self.emitter = SignalEmitter()
         self.SelectedItemData = ""  # attempt to know what row is selected
         self.popUpMessageInit = 1  # I hate these next two, but I don't want to catch old messages. Fix later, maybe.
         self.textWindowMessageInit = 1
@@ -983,6 +987,7 @@ class ControlMain(QtWidgets.QMainWindow):
         self.sceneHutchTop = QtWidgets.QGraphicsScene(0, 0, 320, 180, self)
         self.scene.keyPressEvent = self.sceneKey
         self.view = QtWidgets.QGraphicsView(self.scene)
+        QtWidgets.QApplication.instance().installEventFilter(self)
         self.viewHutchCorner = QtWidgets.QGraphicsView(self.sceneHutchCorner)
         self.viewHutchTop = QtWidgets.QGraphicsView(self.sceneHutchTop)
         self.pixmap_item = QtWidgets.QGraphicsPixmapItem(None)
@@ -2293,22 +2298,31 @@ class ControlMain(QtWidgets.QMainWindow):
         self.beamHeight_ledit.setText(text)
 
     def updateVectorLengthAndSpeed(self):
-        osc_end = float(self.osc_end_ledit.text())
-        osc_range = float(self.osc_range_ledit.text())
-        exposure_time = float(self.exp_time_ledit.text())
+        try:
+            osc_end = float(self.osc_end_ledit.text())
+            osc_range = float(self.osc_range_ledit.text())
+            exposure_time = float(self.exp_time_ledit.text())
 
-        (
-            x_vec,
-            y_vec,
-            z_vec,
-            vector_length,
-            vector_speed,
-        ) = self.vector_widget.get_length_and_speed(
-            osc_end=osc_end, osc_range=osc_range, exposure_time=exposure_time
-        )
+            (
+                x_vec,
+                y_vec,
+                z_vec,
+                vector_length,
+                vector_speed,
+            ) = self.vector_widget.get_length_and_speed(
+                osc_end=osc_end, osc_range=osc_range, exposure_time=exposure_time
+            )
+            #self.updateVectorLengthAndSpeedSignal.emit(vector_length, vector_speed)
+            self.emitter.update_labels.emit(vector_length, vector_speed)
+            return x_vec, y_vec, z_vec, vector_length
+        except Exception as e:
+            print(e)
+            logger.info("Could not calculate vector speed")
+
+    def updateVectorLengthAndSpeedWidget(self, vector_length, vector_speed):
+        print("Updating vector")
         self.vecLenLabelOutput.setText(str(int(vector_length)))
         self.vecSpeedLabelOutput.setText(str(int(vector_speed)))
-        return x_vec, y_vec, z_vec, vector_length
 
     def totalExpChanged(self, text):
         if text == "oscEnd" and daq_utils.beamline == "fmx":
@@ -4264,6 +4278,7 @@ class ControlMain(QtWidgets.QMainWindow):
                 center=(center_x, center_y),
                 length=int(self.vector_length_ledit.text())
             )
+            self.updateVectorLengthAndSpeed()
         else:
             self.vector_widget.set_vector_point(
                 point_name=pointName,
@@ -4982,6 +4997,8 @@ class ControlMain(QtWidgets.QMainWindow):
         self.sampy_pv.add_callback(self.processSampMoveCB, motID="y")
         self.sampz_pv = PV(daq_utils.motor_dict["sampleZ"] + ".RBV")
         self.sampz_pv.add_callback(self.processSampMoveCB, motID="z")
+
+        self.emitter.update_labels.connect(self.updateVectorLengthAndSpeedWidget)
 
         if self.scannerType == "PI":
             self.sampFineX_pv = PV(daq_utils.motor_dict["fineX"] + ".RBV")
