@@ -38,8 +38,10 @@ class DewarTree(QtWidgets.QTreeView):
         self.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
         self.setAnimated(True)
         self.model = QtGui.QStandardItemModel()
-
+        self.setModel(self.model)
+        self.model.itemChanged.connect(self.queueSelectedSample)
         # self.isExpanded = 1
+        self.initialized = False
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.openMenu)
         self.setStyleSheet("QTreeView::item::hover{background-color: #999966;}")
@@ -134,7 +136,7 @@ class DewarTree(QtWidgets.QTreeView):
             super(DewarTree, self).keyPressEvent(event)
 
     def refreshTree(self):
-        self.parent.dewarViewToggleCheckCB()
+        self.refreshTreeDewarView()
 
     def set_mounted_sample(self, item):
         # Formats the text of the item that is passed in as the mounted sample
@@ -147,7 +149,7 @@ class DewarTree(QtWidgets.QTreeView):
 
     def refreshTreeDewarView(self, get_latest_pucks=False):
         puck = ""
-        self.model.clear()
+        #self.model.clear()
         dewar_data, puck_data, sample_data, request_data = db_lib.get_dewar_tree_data(
             daq_utils.primaryDewarName, daq_utils.beamline, get_latest_pucks
         )
@@ -165,19 +167,28 @@ class DewarTree(QtWidgets.QTreeView):
             item = QtGui.QStandardItem(QtGui.QIcon(ICON), f"{index_s} {puckName}")
             item.setData(puckName, 32)
             item.setData("container", 33)
-            parentItem.appendRow(item)
+            if parentItem.rowCount() == i:
+                parentItem.appendRow(item)
+            else:
+                item = parentItem.child(i)
+                #parentItem.takeChild(i,0)
+                #parentItem.setChild(i, 0, item)
             if puck != "" and puckName != "private":
                 puckContents = puck.get("content", [])
                 self.add_samples_to_puck_tree(
                     puckContents, item, index_s, sample_data, request_data
                 )
-        self.setModel(self.model)
-        self.model.itemChanged.connect(self.queueSelectedSample)
-        if self.isExpanded:
+        #self.setModel(self.model)
+        if not self.initialized:
             self.expandAll()
+            self.initialized = True
+        """
+        if self.isExpanded:
+            
         else:
             self.collapseAll()
         self.scrollTo(self.currentIndex(), QtWidgets.QAbstractItemView.PositionAtCenter)
+        """
 
     def add_samples_to_puck_tree(
         self,
@@ -199,7 +210,11 @@ class DewarTree(QtWidgets.QTreeView):
                 position_s = str(j + 1)
                 item = QtGui.QStandardItem(QtGui.QIcon(ICON), position_s)
                 item.setData("", 32)
-                parentItem.appendRow(item)
+                if parentItem.rowCount() == j:
+                    parentItem.appendRow(item)
+                else:
+                    item.takeChild(j, 0)
+                    item.setChild(j, 0, item)
                 continue
 
             sample = sample_data[sample_id]
@@ -222,16 +237,22 @@ class DewarTree(QtWidgets.QTreeView):
                 parentItem.setText(f"{parentItem.text()} -- {proposal_id_text}")
 
             position_s = f'{j+1}-{sample.get("name", "")}'
-            item = QtGui.QStandardItem(
-                QtGui.QIcon(ICON),
-                position_s,
-            )
-            # just stuck sampleID there, but negate it to diff from reqID
-            item.setData(sample_id, 32)
-            item.setData("sample", 33)
+            if parentItem.rowCount() == j:
+                item = QtGui.QStandardItem(
+                    QtGui.QIcon(ICON),
+                    position_s,
+                    )
+                # just stuck sampleID there, but negate it to diff from reqID
+                item.setData(sample_id, 32)
+                item.setData("sample", 33)
+                parentItem.appendRow(item)
+            else:
+                item = parentItem.child(j)
+                item.setText(position_s)
+                item.setData(sample_id, 32)
+                item.setData("sample", 33)
             if sample_id == self.parent.mountedPin_pv.get():
                 self.set_mounted_sample(item)
-            parentItem.appendRow(item)
             if sample_id == self.parent.mountedPin_pv.get():
                 mountedIndex = self.model.indexFromItem(item)
             # looking for the selected item
@@ -239,20 +260,9 @@ class DewarTree(QtWidgets.QTreeView):
                 logger.info("found " + str(self.parent.SelectedItemData))
                 selectedSampleIndex = self.model.indexFromItem(item)
             sampleRequestList = request_data[sample_id]
-            for request in sampleRequestList:
-                if not ("protocol" in request["request_obj"]):
-                    continue
-                col_item = self.create_request_item(request)
-                if request["priority"] == 99999:
-                    selectedIndex = self.model.indexFromItem(
-                        col_item
-                    )  ##attempt to leave it on the request after collection
-                    collectionRunning = True
-                item.appendRow(col_item)
-                if (
-                    request["uid"] == self.parent.SelectedItemData
-                ):  # looking for the selected item, this is a request
-                    selectedIndex = self.model.indexFromItem(col_item)
+            
+            self.add_requests_to_sample(item, sampleRequestList)
+            
 
         current_index = None
         if not collectionRunning:
@@ -270,6 +280,30 @@ class DewarTree(QtWidgets.QTreeView):
         if current_index:
             self.setCurrentIndex(current_index)
             self.parent.row_clicked(current_index)
+
+    def add_requests_to_sample(self, item, sampleRequestList):
+        # Go through the sample requests and add them to the sample
+        for idx, request in enumerate(sampleRequestList):
+            if not ("protocol" in request["request_obj"]):
+                continue
+            col_item = self.create_request_item(request)
+            if request["priority"] == 99999:
+                selectedIndex = self.model.indexFromItem(
+                    col_item
+                )  ##attempt to leave it on the request after collection
+                collectionRunning = True
+            if item.rowCount() == idx:
+                item.appendRow(col_item)
+            else:
+                item.takeChild(idx, 0)
+                item.setChild(idx, 0, col_item)
+            if (
+                request["uid"] == self.parent.SelectedItemData
+            ):  # looking for the selected item, this is a request
+                selectedIndex = self.model.indexFromItem(col_item)
+        if len(sampleRequestList) < item.rowCount():
+            for row in range(item.rowCount() - 1, len(sampleRequestList) - 1, -1):
+                item.removeRow(row)
 
     def is_proposal_member(self, proposal_id) -> bool:
         # Check if the user running LSDC is part of the sample's proposal
