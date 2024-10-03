@@ -781,14 +781,18 @@ class ControlMain(QtWidgets.QMainWindow):
         )  # something for criteria to decide on which hotspots to collect on for multi-xtal
         self.hBoxMultiColParamsLayout1 = QtWidgets.QHBoxLayout()
         self.hBoxMultiColParamsLayout1.setAlignment(QtCore.Qt.AlignLeft)
-        multiColCutoffLabel = QtWidgets.QLabel("Diffraction Cutoff")
-        multiColCutoffLabel.setFixedWidth(110)
+        multiColCutoffLabel = QtWidgets.QLabel("Maximum num. of points")
         self.multiColCutoffEdit = QtWidgets.QLineEdit(
-            "320"
-        )  # may need to store this in DB at some point, it's a silly number for now
+            "10"
+        )
+        multiColWedgeLabel = QtWidgets.QLabel("Wedge")
+        self.multiColWedgeEdit = QtWidgets.QLineEdit("10")
+        
         self.multiColCutoffEdit.setFixedWidth(60)
         self.hBoxMultiColParamsLayout1.addWidget(multiColCutoffLabel)
         self.hBoxMultiColParamsLayout1.addWidget(self.multiColCutoffEdit)
+        self.hBoxMultiColParamsLayout1.addWidget(multiColWedgeLabel)
+        self.hBoxMultiColParamsLayout1.addWidget(self.multiColWedgeEdit)
         self.multiColParamsFrame.setLayout(self.hBoxMultiColParamsLayout1)
         self.characterizeParamsFrame = QFrame()
         vBoxCharacterizeParams1 = QtWidgets.QVBoxLayout()
@@ -4420,6 +4424,7 @@ class ControlMain(QtWidgets.QMainWindow):
             if reqObj["protocol"] == "multiCol" or reqObj["protocol"] == "multiColQ":
                 reqObj["gridStep"] = float(self.rasterStepEdit.text())
                 reqObj["diffCutoff"] = float(self.multiColCutoffEdit.text())
+                reqObj["wedge"] = float(self.multiColWedgeEdit.text())
             if reqObj["protocol"] == "rasterScreen":
                 reqObj["gridStep"] = float(self.rasterStepEdit.text())
             if rasterDef != None:

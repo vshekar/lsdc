@@ -108,3 +108,25 @@ def get_flattened_indices_of_max_col(raster_def, max_col):
         )
 
     return indices
+
+
+def peakfind_maxburn(array, num_iter):
+    '''
+    Collection center finding for multiCol protocol
+    
+    Input 2D array, find max element, store max index in list,
+    then set max element and its 8 neighbors to zero (a.k.a. burn this spot)
+    
+    Repeat until all elements set to zero, or maximum number of iterations reached
+    
+    Returns center list, and "burnt" array
+    '''
+    arr_work = array.copy()
+    indices = []
+    iterate = 1
+    while arr_work.max() != 0 and iterate <= num_iter:
+        iterate = iterate + 1
+        i, j = np.unravel_index(np.argmax(arr_work), arr_work.shape)
+        indices.append((i, j))
+        arr_work[max(i-1, 0):i+2, max(j-1, 0):j+2] = 0
+    return indices, arr_work

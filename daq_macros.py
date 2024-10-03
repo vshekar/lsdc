@@ -7,7 +7,9 @@ import daq_lib
 import daq_utils
 import db_lib
 from daq_utils import getBlConfig, setBlConfig
-from utils.raster import get_raster_max_col, get_flattened_indices_of_max_col
+from utils.raster import (get_raster_max_col, get_flattened_indices_of_max_col, 
+                          peakfind_maxburn, create_snake_array, determine_raster_shape, 
+                          calculate_flattened_index)
 import det_lib
 import math
 import time
@@ -2473,14 +2475,21 @@ def gotoMaxRaster(rasterResult,multiColThreshold=None,**kwargs):
 
   if multiColThreshold is not None:
     logger.info("doing multicol")
-    for index in np.where(score_vals > multiColThreshold)[0]:
-      hitFile = cellResults[index]["cellMapKey"]
+    raster_request = db_lib.getRequestByID(requestID)
+    raster_def = raster_request["request_obj"]["rasterDef"]
+    direction, M, N = determine_raster_shape(raster_def)
+    raster_array = create_snake_array(score_vals, direction, M, N)
+    indices, array = peakfind_maxburn(raster_array, multiColThreshold)
+    for (i, j) in indices:
+
+      flattened_index = calculate_flattened_index(i,j,M, N, direction)
+      hitFile = cellResults[flattened_index]["cellMapKey"]
       hitCoords = rasterMap[hitFile]
       parent_req_id = rasterResult['result_obj']["parentReqID"]
       if parent_req_id == -1:
-        addMultiRequestLocation(requestID, hitCoords, index)
+        addMultiRequestLocation(requestID, hitCoords, flattened_index)
       else:
-        addMultiRequestLocation(parent_req_id, hitCoords, index)
+        addMultiRequestLocation(parent_req_id, hitCoords, flattened_index)
 
   
   if max_index:
@@ -2618,9 +2627,13 @@ def addMultiRequestLocation(parentReqID,hitCoords,locIndex): #rough proto of wha
   dataDirectory = parentRequest["request_obj"]['directory']+"multi_"+str(locIndex)
   runNum = parentRequest["request_obj"]['runNum']
   tempnewStratRequest = daq_utils.createDefaultRequest(sampleID)
-  ss = parentRequest["request_obj"]["sweep_start"]
-  sweepStart = ss - 2.5
-  sweepEnd = ss + 2.5
+  ss = parentRequest["request_obj"]["rasterDef"]["omega"]
+  if "wedge" in parentRequest["request_obj"]:
+    wedge = float(parentRequest["request_obj"]["wedge"])
+  else:
+    wedge = 10
+  sweepStart = ss - wedge/2
+  sweepEnd = ss + wedge/2
   imgWidth = parentRequest["request_obj"]['img_width']
   exptime = parentRequest["request_obj"]['exposure_time']
   currentDetDist = parentRequest["request_obj"]['detDist']
