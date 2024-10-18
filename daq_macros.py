@@ -34,7 +34,7 @@ from config_params import *
 from ophyd.status import SubscriptionStatus
 from ophyd.utils import WaitTimeoutError
 from kafka_producer import send_kafka_message
-
+import json
 import gov_lib
 import urllib.request
 import io
@@ -2480,9 +2480,10 @@ def gotoMaxRaster(rasterResult,multiColThreshold=None,**kwargs):
     direction, M, N = determine_raster_shape(raster_def)
     raster_array = create_snake_array(score_vals, direction, M, N)
     indices, array = peakfind_maxburn(raster_array, multiColThreshold)
-    for (i, j) in indices:
-
-      flattened_index = calculate_flattened_index(i,j,M, N, direction)
+    flattened_indices_grid = []    
+    for (x, y) in indices:
+      flattened_index = calculate_flattened_index(y, x, M, N, direction)
+      flattened_indices_grid.append(calculate_flattened_index(y, x, M, N, pattern=None))
       hitFile = cellResults[flattened_index]["cellMapKey"]
       hitCoords = rasterMap[hitFile]
       parent_req_id = rasterResult['result_obj']["parentReqID"]
@@ -2490,6 +2491,7 @@ def gotoMaxRaster(rasterResult,multiColThreshold=None,**kwargs):
         addMultiRequestLocation(requestID, hitCoords, flattened_index)
       else:
         addMultiRequestLocation(parent_req_id, hitCoords, flattened_index)
+    daq_lib.gui_message(json.dumps({"highlight_cells": flattened_indices_grid}))
 
   
   if max_index:

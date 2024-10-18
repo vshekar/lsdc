@@ -23,22 +23,26 @@ def calculate_matrix_index(k, M, N, pattern="horizontal"):
         return i, j
 
 
-def calculate_flattened_index(i, j, M, N, pattern="horizontal"):
+def calculate_flattened_index(y, x, num_cols, num_rows, pattern: "Optional[str]"="horizontal"):
     """
     Returns the index of the result array of a raster based on the
     row and column index, shape of the raster and the
     direction of collection
+    If pattern = None, snaking pattern is not used. Rows are arranged
+    left to right
     """
     if pattern == "horizontal":
-        if i % 2 == 0:  # odd row
-            return i * (N) + j
+        if y % 2 == 0:  # odd row
+            return y * (num_rows) + x
         else:  # even row
-            return i * N + (N - 1 - j)
+            return y * num_rows + (num_rows - 1 - x)
     elif pattern == "vertical":
-        if j % 2 == 0:  # Odd column
-            return j * M + i
+        if x % 2 == 0:  # Odd column
+            return x * num_cols + y
         else:  # Even column
-            return j * M + (M - 1 - i)
+            return x * num_cols + (num_cols - 1 - y)
+    elif pattern is None:
+        return y * num_rows + x
     else:
         raise ValueError("Invalid pattern specified")
 

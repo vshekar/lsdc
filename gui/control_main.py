@@ -5405,7 +5405,30 @@ class ControlMain(QtWidgets.QMainWindow):
         if message_s == "killMessage":
             return
         else:
-            self.popupMessage.showMessage(message_s)
+            try:
+                broadcast_command = json.loads(message_s)
+                self.processServerCommand(broadcast_command)
+            except json.JSONDecodeError:
+                self.popupMessage.showMessage(message_s)
+            except Exception as e:
+                logger.error(f"Could not process command: {e}")
+
+    def processServerCommand(self, command: "dict[str, Any]"):
+        """
+            Process a command broadcasted from the server
+        """
+        if "highlight_cells" in command:
+            if self.rasterList:
+                last_raster_cells = self.rasterList[-1]["graphicsItem"].childItems()
+                for cell_idx in command["highlight_cells"]:
+                    # Highlight the cells that will be collected, 
+                    # assuming the last raster is the correct one!
+                    if cell_idx < len(last_raster_cells):
+                        cell = last_raster_cells[cell_idx]
+                        cell.setPen(self.redPen)
+                        cell.setZValue(1)
+        else:
+            raise ValueError(f"Command not found: {command}")
 
     def printServerMessage(self, message_s):
         if self.textWindowMessageInit:
