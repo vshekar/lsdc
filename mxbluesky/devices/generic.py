@@ -1,6 +1,8 @@
 from ophyd import Component as Cpt
 from ophyd import Device, EpicsMotor, EpicsSignal
+from ophyd.status import SubscriptionStatus
 from mxbluesky.devices import standardize_readback
+
 
 class WorkPositions(Device):
     gx = Cpt(EpicsSignal, "{Gov:Robot-Dev:gx}Pos:Work-Pos")
@@ -14,6 +16,7 @@ class MountPositions(Device):
     py = Cpt(EpicsSignal, "{Gov:Robot-Dev:gpy}Pos:Mount-Pos")
     pz = Cpt(EpicsSignal, "{Gov:Robot-Dev:gpz}Pos:Mount-Pos")
     o = Cpt(EpicsSignal, "{Gov:Robot-Dev:go}Pos:Mount-Pos")
+
 
 @standardize_readback
 class GoniometerStack(Device):
@@ -34,3 +37,34 @@ class GoniometerStack(Device):
         self.z = self.pz
         self.cz = self.pz
         self.omega = self.o
+
+
+class Dewar(Device):
+    rotation = Cpt(EpicsSignal, "{Dew:1-Ax:R}Virtual")
+    rotation_motor = Cpt(EpicsMotor, "{Dew:1-Ax:R}Mtr")
+
+    def rotate(self, rotation_angle, absolute=True):
+        def check_value_sink(*, old_value, value, **kwargs):
+            "Return True when the movement is complete, False otherwise."
+            return old_value == 1 and value == 0
+
+        def check_value_raise(*, old_value, value, **kwargs):
+            "Return True when the movement is started, False otherwise."
+            return old_value == 0 and value == 1
+
+        status = SubscriptionStatus(
+            self.rotation_motor.motor_done_move, check_value_sink
+        )
+        if not self.rotation_motor.motor_done_move.get():
+            raise RuntimeError("Dewar rotation motor already moving.")
+            ### Maybe don't raise an error here but rather do a timeout retry?
+        if absolute:
+            self.rotation.set(rotation_angle)
+        else:
+            current_angle = self.rotation.get()
+            self.rotation.set(current_angle + rotation_angle)
+        status.wait()
+        status = SubscriptionStatus(
+            self.rotation_motor.motor_done_move, check_value_raise
+        )
+        status.wait()
