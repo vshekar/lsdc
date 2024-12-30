@@ -169,8 +169,6 @@ class ScreenDefaultsDialog(QtWidgets.QDialog):
         vBoxDialsParams.addLayout(self.hBoxRasterLayout3)
         dialsGB.setLayout(vBoxDialsParams)
 
-        reprocessRasterButton = QtWidgets.QPushButton("ReProcessRaster")
-        reprocessRasterButton.clicked.connect(self.reprocessRasterRequestCB)
         self.buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.Apply | QtWidgets.QDialogButtonBox.Cancel,
             QtCore.Qt.Horizontal,
@@ -181,7 +179,6 @@ class ScreenDefaultsDialog(QtWidgets.QDialog):
         vBoxColParams1.addWidget(collectionGB)
         vBoxColParams1.addWidget(dozorGB)
         vBoxColParams1.addWidget(dialsGB)
-        # vBoxColParams1.addWidget(reprocessRasterButton)
         vBoxColParams1.addWidget(self.buttons)
         self.setLayout(vBoxColParams1)
 
@@ -196,15 +193,6 @@ class ScreenDefaultsDialog(QtWidgets.QDialog):
                 self.trans_ledit.setText("%.3f" % float(value))
             else:
                 logger.error("setGuiValues unknown item: %s value: %s" % (item, value))
-
-    def reprocessRasterRequestCB(self):
-        self.parent.eraseCB()
-        try:
-            reqID = self.parent.selectedSampleRequest["uid"]
-            self.parent.drawPolyRaster(db_lib.getRequestByID(reqID))
-            self.parent.send_to_server("reprocessRaster", [reqID])
-        except:
-            pass
 
     def screenDefaultsCancelCB(self):
         self.done(QtWidgets.QDialog.Rejected)

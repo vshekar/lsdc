@@ -56,7 +56,6 @@ functions = [
     continue_data_collection,
     mountSample,
     unmountSample,
-    reprocessRaster,
     fastDPNodes,
     spotNodes,
     unmountCold,

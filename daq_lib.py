@@ -559,10 +559,6 @@ def collectData(currentRequest):
     RE(daq_macros.snakeRaster(currentRequest["uid"]))
   elif (prot == "rasterScreen"):
     daq_macros.rasterScreen(currentRequest)    
-  elif (prot == "multiColQ"):
-    daq_macros.multiCol(currentRequest)
-  elif (prot == "eScan"):
-    daq_macros.eScan(currentRequest)
   else: #standard, screening, or edna - these may require autoalign, checking first
     if (reqObj["pos_x"] != -999):
       beamline_lib.mvaDescriptor("sampleX",reqObj["pos_x"])
