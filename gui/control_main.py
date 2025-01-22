@@ -160,6 +160,15 @@ class ControlMain(QtWidgets.QMainWindow):
     cryostreamTempSignal = QtCore.Signal(object)
     sampleZoomChangeSignal = QtCore.Signal(object)
 
+    @staticmethod
+    def control_check(func):
+        def wrapper(self, *args, **kwargs):
+            if self.controlEnabled():
+                return func(self, *args, **kwargs)
+            else:
+                self.popupServerMessage("You don't have control")
+        return wrapper
+
     def __init__(self):
         super(ControlMain, self).__init__()
         self.proposal_directories = {}
@@ -2858,24 +2867,20 @@ class ControlMain(QtWidgets.QMainWindow):
             {"relative": False}
         )
 
+    @control_check
     def moveEnergyMaxDeltaCB(self, max_delta=10.0):
         energyRequest = float(str(self.energy_ledit.text()))
-        if self.controlEnabled():
-            if abs(energyRequest - self.energy_pv.get()) > max_delta:
-                self.popupServerMessage(f"Energy change must be less than or equal to {max_delta:.2f} ev")
-                return
-            else:
-                self.send_to_server("mvaDescriptor", ["energy", float(self.energy_ledit.text())])
-                comm_s = 'mvaDescriptor("energy",' + str(self.energy_ledit.text()) + ")"
-                logger.info(comm_s)
+        if abs(energyRequest - self.energy_pv.get()) > max_delta:
+            self.popupServerMessage(f"Energy change must be less than or equal to {max_delta:.2f} ev")
+            return
         else:
-            self.popupServerMessage("You don't have control")
+            self.send_to_server("mvaDescriptor", ["energy", float(self.energy_ledit.text())])
+            comm_s = 'mvaDescriptor("energy",' + str(self.energy_ledit.text()) + ")"
+            logger.info(comm_s)
 
+    @control_check
     def moveEnergyCB(self):
-        if self.controlEnabled():
-            set_energy = SetEnergyDialog(parent=self)
-        else:
-            self.popupServerMessage("You don't have control")
+        set_energy = SetEnergyDialog(parent=self)
 
     def setLifetimeCB(self, lifetime):
         if hasattr(self, "sampleLifetimeReadback_ledit"):
@@ -2957,18 +2962,13 @@ class ControlMain(QtWidgets.QMainWindow):
 
     def omegaTweakNegCB(self):
         tv = float(self.omegaTweakVal_ledit.text())
-        if self.controlEnabled():
-            self.send_to_server("move_omega", [-tv])
-        else:
-            self.popupServerMessage("You don't have control")
+        self.send_to_server("move_omega", [-tv])
 
     def omegaTweakPosCB(self):
         tv = float(self.omegaTweakVal_ledit.text())
-        if self.controlEnabled():
-            self.send_to_server("move_omega", [tv])
-        else:
-            self.popupServerMessage("You don't have control")
+        self.send_to_server("move_omega", [tv])
 
+    @control_check
     def focusTweakCB(self, tv):
         tvf = float(tv) * daq_utils.unitScaling
 
@@ -2987,24 +2987,18 @@ class ControlMain(QtWidgets.QMainWindow):
         elif current_viewangle == daq_utils.CAMERA_ANGLE_ABOVE:
             view_omega_offset = -90
 
-        if self.controlEnabled():
-            tvY = tvf * (
-                math.cos(math.radians(view_omega_offset + self.gon.omega.val()))
-            )  # these are opposite C2C
-            tvZ = tvf * (
-                math.sin(math.radians(view_omega_offset + self.gon.omega.val()))
-            )
-            self.gon.y.move(self.gon.y.val() + tvY)
-            self.gon.z.move(self.gon.z.val() + tvZ)
-        else:
-            self.popupServerMessage("You don't have control")
+        tvY = tvf * (
+            math.cos(math.radians(view_omega_offset + self.gon.omega.val()))
+        )  # these are opposite C2C
+        tvZ = tvf * (
+            math.sin(math.radians(view_omega_offset + self.gon.omega.val()))
+        )
+        self.gon.y.move(self.gon.y.val() + tvY)
+        self.gon.z.move(self.gon.z.val() + tvZ)
 
     def omegaTweakCB(self, tv):
-        if self.controlEnabled():
-            self.send_to_server("move_omega", [float(tv)])
-            time.sleep(0.05)
-        else:
-            self.popupServerMessage("You don't have control")
+        self.send_to_server("move_omega", [float(tv)])
+        time.sleep(0.05)
 
     def autoCenterLoopCB(self):
         self.send_to_server("loop_center_xrec")
@@ -4586,36 +4580,31 @@ class ControlMain(QtWidgets.QMainWindow):
     def parkGripperCB(self):
         self.send_to_server("parkGripper")
         
-
+    @control_check
     def restartServerCB(self):
-        if self.controlEnabled():
-            msg = "Desperation move. Are you sure?"
-            #self.timerSample.stop()
-            reply = QtWidgets.QMessageBox.question(
-                self,
-                "Message",
-                msg,
-                QtWidgets.QMessageBox.Yes,
-                QtWidgets.QMessageBox.No,
-            )
-            #self.timerSample.start(SAMPLE_TIMER_DELAY)
-            if reply == QtWidgets.QMessageBox.Yes:
-                if daq_utils.beamline == "fmx" or daq_utils.beamline == "amx":
-                    restart_pv = PV(daq_utils.beamlineComm + "RestartServerSignal")
-                    restart_pv.put(not (restart_pv.get()))
-                else:
-                    logger.error("Not restarting server - unknown beamline")
-        else:
-            self.popupServerMessage("You don't have control")
+        msg = "Desperation move. Are you sure?"
+        #self.timerSample.stop()
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Message",
+            msg,
+            QtWidgets.QMessageBox.Yes,
+            QtWidgets.QMessageBox.No,
+        )
+        #self.timerSample.start(SAMPLE_TIMER_DELAY)
+        if reply == QtWidgets.QMessageBox.Yes:
+            if daq_utils.beamline == "fmx" or daq_utils.beamline == "amx":
+                restart_pv = PV(daq_utils.beamlineComm + "RestartServerSignal")
+                restart_pv.put(not (restart_pv.get()))
+            else:
+                logger.error("Not restarting server - unknown beamline")
 
     def openPhotonShutterCB(self):
         self.photonShutterOpen_pv.put(1)
 
+    @control_check
     def popUserScreenCB(self):
-        if self.controlEnabled():
             self.userScreenDialog.show()
-        else:
-            self.popupServerMessage("You don't have control")
 
     def parkRobotCB(self):
         if daq_utils.beamline == "nyx":
@@ -5295,11 +5284,9 @@ class ControlMain(QtWidgets.QMainWindow):
         self.imageScale.setPen(QtGui.QPen(overlayBrush, 2.0))
         self.imageScaleText.setPen(QtGui.QPen(overlayBrush, 1.0))
 
+    @control_check
     def popStaffDialogCB(self):
-        if self.controlEnabled():
             self.staffScreenDialog.show()
-        else:
-            self.popupServerMessage("You don't have control")
 
     def closeAll(self):
         self.hutchCornerCamThread.stop()
@@ -5505,6 +5492,7 @@ class ControlMain(QtWidgets.QMainWindow):
             and self.controlMasterCheckBox.isChecked()
         )
 
+    @control_check
     def send_to_server(self, function_name: str, args: "Optional[List]" = None, kwargs: "Optional[Dict]" = None):
         if function_name == "lockControl":
             self.controlMaster_pv.put(0 - self.processID)
@@ -5512,13 +5500,10 @@ class ControlMain(QtWidgets.QMainWindow):
         if function_name == "unlockControl":
             self.controlMaster_pv.put(self.processID)
             return
-        if self.controlEnabled():
-            time.sleep(0.01)
-            message = self.generate_server_message(function_name, args, kwargs)
-            logger.info(f"send_to_server: {message}")
-            self.comm_pv.put(message)
-        else:
-            self.popupServerMessage("You don't have control")
+        time.sleep(0.01)
+        message = self.generate_server_message(function_name, args, kwargs)
+        logger.info(f"send_to_server: {message}")
+        self.comm_pv.put(message)
 
     def generate_server_message(
         self, function_name: str, args: "Optional[List]" = None, kwargs: "Optional[Dict]" = None
@@ -5535,11 +5520,9 @@ class ControlMain(QtWidgets.QMainWindow):
             }
         )
 
+    @control_check
     def aux_send_to_server(self, function_name: str, args: "Optional[List]" = None, kwargs: "Optional[Dict]" = None):
-        if self.controlEnabled():
-            time.sleep(0.01)
-            message = self.generate_server_message(function_name, args, kwargs)
-            logger.info(f"aux_send_to_server: {message}")
-            self.immediate_comm_pv.put(message)
-        else:
-            self.popupServerMessage("You don't have control")
+        time.sleep(0.01)
+        message = self.generate_server_message(function_name, args, kwargs)
+        logger.info(f"aux_send_to_server: {message}")
+        self.immediate_comm_pv.put(message)
