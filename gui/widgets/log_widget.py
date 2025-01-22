@@ -28,15 +28,16 @@ def get_summary_widget(path: Path):
     raise Exception(f"Unknown type for summary: {path.suffix}")  
 
 class LogViewerWidget(QWidget):
-    def __init__(self, log_file, max_height=500, parent=None):
+    def __init__(self, log_file=None, max_height=500, parent=None):
         super().__init__(parent)
-        self.log_file = Path(log_file)
         self.initUI(max_height)
-
         self.last_position = 0
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_log)
-        self.timer.start(1000)  # Update every second
+        
+        if log_file:
+            self.log_file = Path(log_file)
+            self.timer = QTimer(self)
+            self.timer.timeout.connect(self.update_log)
+            self.timer.start(1000)  # Update every second
 
         self.auto_scroll = True  # Auto-scroll is enabled by default
 
@@ -74,12 +75,15 @@ class LogViewerWidget(QWidget):
 
                 if new_lines:
                     # self.text_edit.append("".join(new_lines))
-                    cursor = self.text_edit.textCursor()
-                    cursor.movePosition(cursor.End)  # Move cursor to the end
-                    cursor.insertText("".join(new_lines))  # Insert text directly
-                    if self.auto_scroll:
-                        self.text_edit.moveCursor(QTextEdit().textCursor().End)
-
+                    self.add_lines(new_lines)
+    
+    def add_lines(self, text):
+        cursor = self.text_edit.textCursor()
+        cursor.movePosition(cursor.End)  # Move cursor to the end
+        cursor.insertText("".join(text))  # Insert text directly
+        if self.auto_scroll:
+            self.text_edit.moveCursor(QTextEdit().textCursor().End)
+        
 
 class CSVTableWidget(QTableWidget):
     def __init__(self, parent=None, file_path=None):

@@ -9,6 +9,8 @@ import time
 from typing import Dict, List, Optional
 from pathlib import Path
 import threading
+import getpass
+from datetime import datetime
 
 from queue import Queue
 import cv2
@@ -64,7 +66,7 @@ from gui.dialog import (
     UserScreenDialog,
     CalculatorWindow
 )
-from gui.widgets.log_widget import get_summary_widget
+from gui.widgets.log_widget import get_summary_widget, LogViewerWidget
 from gui.raster import RasterCell, RasterGroup
 from gui.vector import VectorMarker, VectorWidget
 from QPeriodicTable import QPeriodicTable
@@ -120,6 +122,13 @@ def get_request_object_escan(
     reqObj["stepsize"] = float(stepsize)
     return reqObj
 
+def control_check(func):
+    def wrapper(self, *args, **kwargs):
+        if self.controlEnabled():
+            return func(self, *args, **kwargs)
+        else:
+            self.popupServerMessage("You don't have control")
+    return wrapper
 
 class ControlMain(QtWidgets.QMainWindow):
     # 1/13/15 - are these necessary?
@@ -160,14 +169,6 @@ class ControlMain(QtWidgets.QMainWindow):
     cryostreamTempSignal = QtCore.Signal(object)
     sampleZoomChangeSignal = QtCore.Signal(object)
 
-    @staticmethod
-    def control_check(func):
-        def wrapper(self, *args, **kwargs):
-            if self.controlEnabled():
-                return func(self, *args, **kwargs)
-            else:
-                self.popupServerMessage("You don't have control")
-        return wrapper
 
     def __init__(self):
         super(ControlMain, self).__init__()
@@ -972,13 +973,21 @@ class ControlMain(QtWidgets.QMainWindow):
             if "pass-" in part:
                 visit_name = f"mx{part.split('-')[1]}-1"
         fast_dp_summary_file = Path(f'{getBlConfig("visitDirectory")}/{visit_name}/fast_dp_dir/fast_dp.summary.csv')
-        summaryTableGB = QtWidgets.QGroupBox()
-        summaryTableGB.setTitle("FastDP Summary")
+        #summaryTableGB = QtWidgets.QGroupBox()
+        #summaryTableGB.setTitle("FastDP Summary")
+
+        log_widget_tabs = QtWidgets.QTabWidget()
+        
         summaryTableLayout = QtWidgets.QVBoxLayout()
         self.summaryTableWidget = get_summary_widget(fast_dp_summary_file)
-        summaryTableLayout.addWidget(self.summaryTableWidget)
-        summaryTableGB.setLayout(summaryTableLayout)
-        vBoxMainColLayout.addWidget(summaryTableGB)
+        self.user_log_widget = LogViewerWidget()
+
+        log_widget_tabs.addTab(self.user_log_widget, "User Message Log")
+        log_widget_tabs.addTab(self.summaryTableWidget, "Fast DP Summary")
+        
+        #summaryTableLayout.addWidget(log_widget_tabs)
+        #summaryTableGB.setLayout(summaryTableLayout)
+        vBoxMainColLayout.addWidget(log_widget_tabs)
         
         self.mainColFrame.setLayout(vBoxMainColLayout)
         self.mainToolBox.addItem(self.mainColFrame, "Collection Parameters")
@@ -5462,11 +5471,13 @@ class ControlMain(QtWidgets.QMainWindow):
             self.popupMessage.showMessage(message_s)
 
     def printServerMessage(self, message_s):
-        if self.textWindowMessageInit:
-            self.textWindowMessageInit = 0
-            return
-        logger.info(message_s)
-        print(message_s)
+        try:
+            broadcast_message = json.loads(message_s)
+            message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} : {broadcast_message['status_message']}\n"
+            self.user_log_widget.add_lines(message)
+            logger.info(message_s)
+        except Exception as e:
+            logger.exception(e)
 
     def colorProgramState(self, programState_s):
         if programState_s == "Setting Energy":
@@ -5517,6 +5528,7 @@ class ControlMain(QtWidgets.QMainWindow):
                 "function": function_name,
                 "args": args,
                 "kwargs": kwargs,
+                "user": getpass.getuser()
             }
         )
 

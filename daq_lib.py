@@ -2,6 +2,7 @@ import os
 import grp
 import getpass
 import time
+import json
 import subprocess
 import daq_macros
 from math import *
@@ -222,11 +223,15 @@ def lockGUI():
 def refreshGuiTree():
   beamline_support.set_any_epics_pv(daq_utils.beamlineComm+"live_q_change_flag","VAL",1)
 
-def broadcast_output(s):
-  time.sleep(0.01)
-  if (s.find('|') == -1):
-    logger.info(s)
-  beamline_support.pvPut(message_string_pv,s)
+def broadcast_output(data: "dict[str, Any]|str"):
+  try:
+    if isinstance(data, dict):
+      broadcast_message = json.dumps(data)
+    elif isinstance(data, str):
+      broadcast_message = json.dumps({"status_message": str(data)})
+  except:
+    broadcast_message = json.dumps({"status_message": str(data)})
+  beamline_support.pvPut(message_string_pv, broadcast_message)
 
 
 def getRobotConfig():
