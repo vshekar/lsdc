@@ -247,6 +247,15 @@ class EMBLRobot:
           _thread.start_new_thread(top_view.wait90TopviewThread,(gov_robot, prefix1,prefix90))
         logger.info("called thread")
 
+    def get_mount_functions(self, absPos):
+      # Check if mount special is enabled and requested sample is in the first puck
+      special_mount_enabled = getBlConfig("special_mount_enabled")
+      logger.info(f"Special mount enabled: {special_mount_enabled}. Getting sample at {absPos}")
+      if special_mount_enabled and (1 <= absPos <= 16):
+        return RobotControlLib.mountSpecial, lambda absPos, warmup=False: RobotControlLib.mountSpecial(absPos)
+      else:
+        return RobotControlLib.mount, lambda absPos, warmup=False: RobotControlLib._mount(absPos, warmup)
+        
 
     def mount(self, gov_robot, puckPos,pinPos,sampID,**kwargs):
       global retryMountCount
@@ -255,6 +264,7 @@ class EMBLRobot:
 
       absPos = (PINS_PER_PUCK*(puckPos%3))+pinPos+1
       logger.info("absPos = " + str(absPos))
+      mount, _mount = self.get_mount_functions(absPos)
       if getBlConfig('robot_online'):
         try:
           if (init):
@@ -271,7 +281,7 @@ class EMBLRobot:
             setPvDesc("boostSelect",0)
             if (getPvDesc("gripTemp")>-170):
               try:
-                RobotControlLib.mount(absPos)
+                mount(absPos)
               except Exception as e:
                 e_s = str(e)
                 message = "ROBOT mount ERROR: " + e_s
@@ -282,17 +292,14 @@ class EMBLRobot:
               time.sleep(0.5)
               if (getPvDesc("sampleDetected") == 0):
                 logger.info("full mount")
-                RobotControlLib.mount(absPos)
+                mount(absPos)
               else:
                 RobotControlLib.initialize()
-                RobotControlLib._mount(absPos)
+                _mount(absPos)
             setPvDesc("boostSelect",1)
           else:
             self.callAlignPinThread(gov_robot, **kwargs)
-            if (warmup):
-              RobotControlLib._mount(absPos,warmup=True)
-            else:
-              RobotControlLib._mount(absPos)
+            _mount(absPos, bool(warmup))
         except Exception as e:
           # the following errors in the exception are from RobotControlMerge
           logger.error(e)
@@ -422,8 +429,10 @@ class EMBLRobot:
           beamline_lib.mvaDescriptor("dewarRot",rotMotTarget)
         try:
           par_init=(beamline_support.get_any_epics_pv("SW:RobotState","VAL")!="Ready")
-          par_cool=(getPvDesc("gripTemp")>-170)
+          par_cool=(getPvDesc("gripTemp")>-170) and not getBlConfig("special_mount_enabled")
           RobotControlLib.unmount1(init=par_init,cooldown=par_cool)
+          if getBlConfig("special_mount_enabled"):
+            self.warmupGripper()
         except Exception as e:
           e_s = str(e)
           message = "ROBOT unmount ERROR: " + e_s
@@ -438,12 +447,22 @@ class EMBLRobot:
           return UNMOUNT_FAILURE
       return UNMOUNT_STEP_SUCCESSFUL
 
+    def get_unmount_function(self, absPos):
+      special_mount_enabled = getBlConfig("special_mount_enabled")
+      logger.info(f"Special mount enabled: {special_mount_enabled}. Unmounting {absPos}")
+      if special_mount_enabled and (1 <= absPos <= 16):
+        return RobotControlLib.unmountSpecial
+      else:
+        return RobotControlLib.unmount2
+      
+
     def unmount(self, gov_robot, puckPos, pinPos, sampID):
         absPos = (PINS_PER_PUCK*(puckPos%3))+pinPos+1
+        unmount = self.get_unmount_function(absPos)    
         if getBlConfig('robot_online'):
           try:
             logger.info("Unmounting sample")
-            RobotControlLib.unmount2(absPos)
+            unmount(absPos)
           except Exception as e:
             e_s = str(e)
             if (e_s.find("Fatal") != -1):
@@ -456,7 +475,7 @@ class EMBLRobot:
               daq_macros.run_robot_recovery_procedure()
               try:
                 # Try to unmount again
-                RobotControlLib.unmount2(absPos)
+                unmount(absPos)
               except Exception as e:
                 # If there is an exception again, return UNMOUNT_FAILURE
                 daq_macros.run_robot_recovery_procedure()

@@ -33,8 +33,12 @@ ICON = ":/trolltech/styles/commonstyle/images/file-16.png"
 class DewarTree(QtWidgets.QTreeView):
     def __init__(self, parent: "ControlMain"):
         super(DewarTree, self).__init__(parent)
-        self.pucksPerDewarSector = PUCKS_PER_DEWAR_SECTOR[daq_utils.beamline]
-        self.dewarSectors = DEWAR_SECTORS[daq_utils.beamline]
+        if daq_utils.getBlConfig("special_mount_enabled"):
+            self.pucksPerDewarSector = 1
+            self.dewarSectors = 1
+        else:
+            self.pucksPerDewarSector = PUCKS_PER_DEWAR_SECTOR[daq_utils.beamline]
+            self.dewarSectors = DEWAR_SECTORS[daq_utils.beamline]
         self.parent = parent
         self.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
         self.setAnimated(True)
@@ -160,8 +164,13 @@ class DewarTree(QtWidgets.QTreeView):
             daq_utils.primaryDewarName, daq_utils.beamline, get_latest_pucks
         )
         parentItem = self.model.invisibleRootItem()
+        if daq_utils.getBlConfig("special_mount_enabled"):
+            dewar_contents = dewar_data["content"][:1]
+        else:
+            dewar_contents = dewar_data["content"]
+        
         for i, puck_id in enumerate(
-            dewar_data["content"]
+            dewar_contents
         ):  # dewar contents is the list of puck IDs
             puck = ""
             puckName = ""
