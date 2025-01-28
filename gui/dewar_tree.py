@@ -33,6 +33,7 @@ ICON = ":/trolltech/styles/commonstyle/images/file-16.png"
 class DewarTree(QtWidgets.QTreeView):
     def __init__(self, parent: "ControlMain"):
         super(DewarTree, self).__init__(parent)
+        # We only want to show 1 puck when special mount is enabled
         if daq_utils.getBlConfig("special_mount_enabled"):
             self.pucksPerDewarSector = 1
             self.dewarSectors = 1
@@ -164,6 +165,7 @@ class DewarTree(QtWidgets.QTreeView):
             daq_utils.primaryDewarName, daq_utils.beamline, get_latest_pucks
         )
         parentItem = self.model.invisibleRootItem()
+        # Checking if special mount is enabled and only using the first puck info 
         if daq_utils.getBlConfig("special_mount_enabled"):
             dewar_contents = dewar_data["content"][:1]
         else:

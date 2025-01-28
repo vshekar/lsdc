@@ -248,7 +248,8 @@ class EMBLRobot:
         logger.info("called thread")
 
     def get_mount_functions(self, absPos):
-      # Check if mount special is enabled and requested sample is in the first puck
+      # This function returns the appropriate mount function from RobotControlLib based
+      # on whether special_mount_enabled is true
       special_mount_enabled = getBlConfig("special_mount_enabled")
       logger.info(f"Special mount enabled: {special_mount_enabled}. Getting sample at {absPos}")
       if special_mount_enabled and (1 <= absPos <= 16):
@@ -448,6 +449,8 @@ class EMBLRobot:
       return UNMOUNT_STEP_SUCCESSFUL
 
     def get_unmount_function(self, absPos):
+      # This function returns the appropriate unmount function from RobotControlLib based
+      # on whether special_mount_enabled is true
       special_mount_enabled = getBlConfig("special_mount_enabled")
       logger.info(f"Special mount enabled: {special_mount_enabled}. Unmounting {absPos}")
       if special_mount_enabled and (1 <= absPos <= 16):
