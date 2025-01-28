@@ -48,6 +48,13 @@ class DewarTree(QtWidgets.QTreeView):
         self.setStyleSheet("QTreeView::item::hover{background-color: #999966;}")
         # Keeps track of whether the user is part of a proposal
         self.proposal_membership = {}
+        self.follow_current_request = False
+
+    def toggle_follow_request(self, check_state):
+        if check_state == Qt.CheckState.Checked:
+            self.follow_current_request = True
+        else:
+            self.follow_current_request = False
 
     def openMenu(self, position):
         indexes = self.selectedIndexes()
@@ -284,14 +291,14 @@ class DewarTree(QtWidgets.QTreeView):
         elif collectionRunning and mountedIndex:
             current_index = mountedIndex
 
-        if current_index:
+        if current_index and self.follow_current_request:
             self.setCurrentIndex(current_index)
             self.parent.row_clicked(current_index)
 
     def add_requests_to_sample(self, item, sampleRequestList):
         # Go through the sample requests and add them to the sample
         for idx, request in enumerate(sampleRequestList):
-            if not ("protocol" in request["request_obj"]):
+            if "protocol" not in request["request_obj"]:
                 continue
             col_item = self.create_request_item(request)
             if request["priority"] == 99999:
@@ -299,11 +306,18 @@ class DewarTree(QtWidgets.QTreeView):
                     col_item
                 )  ##attempt to leave it on the request after collection
                 collectionRunning = True
+
             if item.rowCount() == idx:
                 item.appendRow(col_item)
             else:
-                item.takeChild(idx, 0)
-                item.setChild(idx, 0, col_item)
+                current_child = item.child(idx)
+                if current_child.data(32) == col_item.data(32):
+                    if current_child.data(34) != col_item.data(34):
+                        self.update_item_priority(current_child, request)
+                        item.setChild(idx, 0, col_item)
+                else:
+                    item.removeRow(idx)
+                    item.setChild(idx, 0, col_item)
             if (
                 request["uid"] == self.parent.SelectedItemData
             ):  # looking for the selected item, this is a request
@@ -340,26 +354,32 @@ class DewarTree(QtWidgets.QTreeView):
         )
         col_item.setData(request["uid"], 32)
         col_item.setData("request", 33)
+        col_item.setData(request["priority"], 34)
         col_item.setFlags(
             Qt.ItemFlag.ItemIsUserCheckable  # type:ignore
             | Qt.ItemFlag.ItemIsEnabled
             | Qt.ItemFlag.ItemIsEditable
             | Qt.ItemFlag.ItemIsSelectable
         )
-        if request["priority"] == 99999:
+        col_item = self.update_item_priority(col_item, request)
+        col_item.setToolTip(self.fillToolTip(request))
+        return col_item
+
+    def update_item_priority(self, col_item, request):
+        if col_item.data(34) == 99999:
             col_item.setCheckState(Qt.CheckState.Checked)
             col_item.setBackground(QtGui.QColor("green"))
             self.parent.refreshCollectionParams(request, validate_hdf5=False)
-        elif request["priority"] > 0:
+        elif col_item.data(34) > 0:
             col_item.setCheckState(Qt.CheckState.Checked)
             col_item.setBackground(QtGui.QColor("white"))
-        elif request["priority"] < 0:
+        elif col_item.data(34) < 0:
             col_item.setCheckable(False)
             col_item.setBackground(QtGui.QColor("cyan"))
         else:
             col_item.setCheckState(Qt.CheckState.Unchecked)
             col_item.setBackground(QtGui.QColor("white"))
-        col_item.setToolTip(self.fillToolTip(request))
+        
         return col_item
 
     def refreshTreePriorityView(
@@ -468,7 +488,8 @@ class DewarTree(QtWidgets.QTreeView):
                 db_lib.updatePriority(reqID, 0)
             item.setBackground(QtGui.QColor("white"))
             self.parent.treeChanged_pv.put(
-                self.parent.processID
+                #self.parent.processID
+                1
             )  # the idea is touch the pv, but have this gui instance not refresh
 
     def queueAllSelectedCB(self):

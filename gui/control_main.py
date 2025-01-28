@@ -338,6 +338,12 @@ class ControlMain(QtWidgets.QMainWindow):
         treeSelectMode = QtWidgets.QAbstractItemView.ExtendedSelection
         self.dewarTree.setSelectionMode(treeSelectMode)
         self.dewarTree.setSelectionBehavior(treeSelectBehavior)
+        self.follow_current_request_checkbox = QtWidgets.QCheckBox(
+            "Follow current request in tree"
+        )
+        self.follow_current_request_checkbox.stateChanged.connect(
+            self.dewarTree.toggle_follow_request
+        )
         hBoxRadioLayout1 = QtWidgets.QHBoxLayout()
         self.viewRadioGroup = QtWidgets.QButtonGroup()
         self.priorityViewRadio = QtWidgets.QRadioButton("PriorityView")
@@ -355,6 +361,7 @@ class ControlMain(QtWidgets.QMainWindow):
         self.viewRadioGroup.addButton(self.dewarViewRadio)
         vBoxDFlayout.addLayout(hBoxRadioLayout1)
         vBoxDFlayout.addWidget(self.dewarTree)
+        vBoxDFlayout.addWidget(self.follow_current_request_checkbox)
         queueSelectedButton = QtWidgets.QPushButton("Queue All Selected")
         queueSelectedButton.clicked.connect(self.dewarTree.queueAllSelectedCB)
         deQueueSelectedButton = QtWidgets.QPushButton("deQueue All Selected")
