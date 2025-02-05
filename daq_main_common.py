@@ -99,6 +99,10 @@ def execute_command(command_s):
   try:
       command: "dict[str, Any]" = json.loads(command_s)
       func = whitelisted_functions[command["function"]]
+      user = command.get("user", None)
+      message = f"User {user} executed {command['function']}"
+      broadcast_output(message)
+      logger.info(message)
   except Exception as e:
       logger.exception(f"Error in function parsing and lookup: {e}")
   
