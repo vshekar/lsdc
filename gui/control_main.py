@@ -49,6 +49,7 @@ from config_params import (
     VALID_TRANSMISSION,
     RasterStatus,
     cryostreamTempPV,
+    CollectionProtocols
 )
 from daq_utils import getBlConfig, setBlConfig
 from element_info import element_info
@@ -115,7 +116,7 @@ def get_request_object_escan(
         logger.error("Problem with a value passed in - %s" % e)
         reqObj["file_number_start"] = 1
     reqObj["exposure_time"] = float(exposure_time)
-    reqObj["protocol"] = "eScan"
+    reqObj["protocol"] = CollectionProtocols.E_SCAN
     reqObj["scanEnergy"] = targetEnergy
     reqObj["runChooch"] = True  # just hardcode for now
     reqObj["steps"] = int(steps)
@@ -661,50 +662,37 @@ class ControlMain(QtWidgets.QMainWindow):
         protoLabel.setFont(font)
         protoLabel.setAlignment(QtCore.Qt.AlignCenter)
         self.protoRadioGroup = QtWidgets.QButtonGroup()
-        self.protoStandardRadio = QtWidgets.QRadioButton("standard")
+        self.protoStandardRadio = QtWidgets.QRadioButton(CollectionProtocols.STANDARD)
         self.protoStandardRadio.setChecked(True)
         self.protoStandardRadio.toggled.connect(
-            functools.partial(self.protoRadioToggledCB, "standard")
+            functools.partial(self.protoRadioToggledCB, CollectionProtocols.STANDARD)
         )
         self.protoStandardRadio.pressed.connect(
-            functools.partial(self.protoRadioToggledCB, "standard")
+            functools.partial(self.protoRadioToggledCB, CollectionProtocols.STANDARD)
         )
         self.protoRadioGroup.addButton(self.protoStandardRadio)
-        self.protoRasterRadio = QtWidgets.QRadioButton("raster")
+        
+        self.protoRasterRadio = QtWidgets.QRadioButton(CollectionProtocols.RASTER)
         self.protoRasterRadio.toggled.connect(
-            functools.partial(self.protoRadioToggledCB, "raster")
+            functools.partial(self.protoRadioToggledCB, CollectionProtocols.RASTER)
         )
         self.protoRasterRadio.pressed.connect(
-            functools.partial(self.protoRadioToggledCB, "raster")
+            functools.partial(self.protoRadioToggledCB, CollectionProtocols.RASTER)
         )
         self.protoRadioGroup.addButton(self.protoRasterRadio)
-        self.protoVectorRadio = QtWidgets.QRadioButton("vector")
+        self.protoVectorRadio = QtWidgets.QRadioButton(CollectionProtocols.VECTOR)
         self.protoRasterRadio.toggled.connect(
-            functools.partial(self.protoRadioToggledCB, "vector")
+            functools.partial(self.protoRadioToggledCB, CollectionProtocols.VECTOR)
         )
         self.protoRasterRadio.pressed.connect(
-            functools.partial(self.protoRadioToggledCB, "vector")
+            functools.partial(self.protoRadioToggledCB, CollectionProtocols.VECTOR)
         )
         self.protoRadioGroup.addButton(self.protoVectorRadio)
         self.protoOtherRadio = QtWidgets.QRadioButton("other")
         self.protoOtherRadio.setEnabled(False)
         self.protoRadioGroup.addButton(self.protoOtherRadio)
-        if daq_utils.beamline == "nyx":
-            protoOptionList = ["standard","raster","vector"] # these should probably come from db
 
-        else:
-            protoOptionList = [
-                "standard",
-                "raster",
-                "vector",
-                "burn",
-                "rasterScreen",
-                "stepRaster",
-                "stepVector",
-                "multiCol",
-                "characterize",
-                "ednaCol",
-            ]  # these should probably come from db
+        protoOptionList = CollectionProtocols.get_beamline_options(daq_utils.beamline)
         self.protoComboBox = QtWidgets.QComboBox(self)
         self.protoComboBox.addItems(protoOptionList)
         self.protoComboBox.activated[str].connect(self.protoComboActivatedCB)
@@ -1747,16 +1735,10 @@ class ControlMain(QtWidgets.QMainWindow):
             self.showProtParams()
         if self.vidActionC2CRadio.isChecked():
             self.click_positions = []
-            if (
-                self.protoComboBox.findText(str("raster"))
-                == self.protoComboBox.currentIndex()
-                or self.protoComboBox.findText(str("stepRaster"))
-                == self.protoComboBox.currentIndex()
-            ):
-                self.protoComboBox.setCurrentIndex(
-                    self.protoComboBox.findText(str("standard"))
-                )
-                self.protoComboActivatedCB("standard")
+            if self.protoComboBox.currentText() in (CollectionProtocols.RASTER, 
+                                                    CollectionProtocols.STEP_RASTER):
+                self.protoComboBox.setCurrentText(CollectionProtocols.STANDARD)
+                self.protoComboActivatedCB(CollectionProtocols.STANDARD)
             self.showProtParams()
 
     def adjustGraphics4ZoomChange(self, fov):
@@ -2223,7 +2205,7 @@ class ControlMain(QtWidgets.QMainWindow):
         self.vector_widget.update_vector(posRBV, motID, self.centerMarker.pos(), offset)
 
     def queueEnScanCB(self):
-        self.protoComboBox.setCurrentIndex(self.protoComboBox.findText(str("eScan")))
+        self.protoComboBox.setCurrentText(CollectionProtocols.E_SCAN)
         self.addRequestsToAllSelectedCB()
         self.treeChanged_pv.put(1)
 
@@ -2464,10 +2446,8 @@ class ControlMain(QtWidgets.QMainWindow):
             self.choochF2PrimeInfl.setText(str(choochResultObj["f2prime_infl"]))
             self.choochF2PrimePeak.setText(str(choochResultObj["f2prime_peak"]))
             self.choochResultFlag_pv.put("0")
-            self.protoComboBox.setCurrentIndex(
-                self.protoComboBox.findText(str("standard"))
-            )
-            self.protoComboActivatedCB("standard")
+            self.protoComboBox.setCurrentText(CollectionProtocols.STANDARD)
+            self.protoComboActivatedCB(CollectionProtocols.STANDARD)
         except TypeError as e:
             logger.error(
                 "Chooch plotting failed - check whether scan had a strong signal or not: %s"
@@ -2501,26 +2481,26 @@ class ControlMain(QtWidgets.QMainWindow):
         self.multiColParamsFrame.hide()
         self.osc_start_ledit.setEnabled(True)
         self.osc_end_ledit.setEnabled(True)
-        if protocol == "raster" or protocol == "rasterScreen":
+        if protocol in (CollectionProtocols.RASTER, CollectionProtocols.RASTER_SCREEN):
             self.rasterParamsFrame.show()
             self.osc_start_ledit.setEnabled(False)
             self.osc_end_ledit.setEnabled(False)
 
-        elif protocol == "stepRaster":
+        elif protocol == CollectionProtocols.STEP_RASTER:
             self.rasterParamsFrame.show()
             self.processingOptionsFrame.show()
-        elif protocol == "multiCol" or protocol == "multiColQ":
+        elif protocol in (CollectionProtocols.MULTI_COL, CollectionProtocols.MULTI_COL_Q):
             self.rasterParamsFrame.show()
             self.osc_start_ledit.setEnabled(False)
             self.osc_end_ledit.setEnabled(False)
             self.multiColParamsFrame.show()
-        elif protocol == "vector" or protocol == "stepVector":
+        elif protocol in (CollectionProtocols.VECTOR, CollectionProtocols.STEP_VECTOR):
             self.vectorParamsFrame.show()
             self.processingOptionsFrame.show()
-        elif protocol == "characterize" or protocol == "ednaCol":
+        elif protocol in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL):
             self.characterizeParamsFrame.show()
             self.processingOptionsFrame.show()
-        elif protocol == "standard" or protocol == "burn":
+        elif protocol in (CollectionProtocols.STANDARD, CollectionProtocols.BURN):
             self.processingOptionsFrame.show()
         else:
             pass
@@ -2556,10 +2536,8 @@ class ControlMain(QtWidgets.QMainWindow):
                     if self.controlEnabled():
                         self.stillMode_pv.put(1)
                 self.colEndLabel.setText("Number of Images: ")
-                if (
-                    str(self.protoComboBox.currentText()) != "standard"
-                    and str(self.protoComboBox.currentText()) != "vector"
-                ):
+                if self.protoComboBox.currentText() not in (CollectionProtocols.STANDARD, 
+                                                            CollectionProtocols.VECTOR):
                     self.totalExptime_ledit.setText("----")
                 else:
                     try:
@@ -2582,10 +2560,8 @@ class ControlMain(QtWidgets.QMainWindow):
         except ValueError:
             return
 
-        if (
-            str(self.protoComboBox.currentText()) != "standard"
-            and str(self.protoComboBox.currentText()) != "vector"
-        ):
+        if self.protoComboBox.currentText() not in (CollectionProtocols.STANDARD,
+                                                    CollectionProtocols.VECTOR)
             self.totalExptime_ledit.setText("----")
         else:
             try:
@@ -2600,7 +2576,7 @@ class ControlMain(QtWidgets.QMainWindow):
             except ZeroDivisionError:
                 totalExptime = 0.0
             self.totalExptime_ledit.setText("%.3f" % totalExptime)
-            if str(self.protoComboBox.currentText()) == "vector":
+            if str(self.protoComboBox.currentText()) == CollectionProtocols.VECTOR:
                 try:
                     self.updateVectorLengthAndSpeed()
                 except:
@@ -2717,13 +2693,13 @@ class ControlMain(QtWidgets.QMainWindow):
 
     def protoRadioToggledCB(self, text):
         if self.protoStandardRadio.isChecked():
-            self.protoComboBox.setCurrentIndex(self.protoComboBox.findText("standard"))
+            self.protoComboBox.setCurrentText(CollectionProtocols.STANDARD)
             self.protoComboActivatedCB(text)
         elif self.protoRasterRadio.isChecked():
-            self.protoComboBox.setCurrentIndex(self.protoComboBox.findText("raster"))
+            self.protoComboBox.setCurrentText(CollectionProtocols.RASTER)
             self.protoComboActivatedCB(text)
         elif self.protoVectorRadio.isChecked():
-            self.protoComboBox.setCurrentIndex(self.protoComboBox.findText("vector"))
+            self.protoComboBox.setCurrentText(CollectionProtocols.VECTOR)
             self.protoComboActivatedCB(text)
         else:
             pass
@@ -2738,15 +2714,12 @@ class ControlMain(QtWidgets.QMainWindow):
     def protoComboActivatedCB(self, text):
         self.showProtParams()
         protocol = str(self.protoComboBox.currentText())
-        if protocol in ("raster", "stepRaster", "rasterScreen", "multiCol"):
+        if protocol in (CollectionProtocols.RASTER, CollectionProtocols.STEP_RASTER,
+                        CollectionProtocols.RASTER_SCREEN, CollectionProtocols.MULTI_COL):
             self.vidActionRasterDefRadio.setChecked(True)
         else:
             self.vidActionC2CRadio.setChecked(True)
-        if protocol == "burn":
-            self.staffScreenDialog.fastDPCheckBox.setChecked(False)
-        else:
-            self.staffScreenDialog.fastDPCheckBox.setChecked(True)
-        if protocol == "raster":
+        if protocol == CollectionProtocols.RASTER:
             self.protoRasterRadio.setChecked(True)
             self.osc_start_ledit.setEnabled(False)
             self.osc_end_ledit.setEnabled(False)
@@ -2757,7 +2730,7 @@ class ControlMain(QtWidgets.QMainWindow):
                     "transmission": getBlConfig("rasterDefaultTrans"),
                 }
             )
-        elif protocol == "rasterScreen":
+        elif protocol == CollectionProtocols.RASTER_SCREEN:
             self.osc_start_ledit.setEnabled(False)
             self.osc_end_ledit.setEnabled(False)
             self.setGuiValues(
@@ -2768,7 +2741,7 @@ class ControlMain(QtWidgets.QMainWindow):
                 }
             )
             self.protoOtherRadio.setChecked(True)
-        elif protocol == "standard":
+        elif protocol == CollectionProtocols.STANDARD:
             self.protoStandardRadio.setChecked(True)
             self.setGuiValues(
                 {
@@ -2781,7 +2754,8 @@ class ControlMain(QtWidgets.QMainWindow):
             self.osc_end_ledit.setEnabled(True)
             if daq_utils.beamline == "fmx":
                 self.calcLifetimeCB()
-        elif protocol == "burn":
+        elif protocol == CollectionProtocols.BURN:
+            self.staffScreenDialog.fastDPCheckBox.setChecked(False)
             self.setGuiValues(
                 {
                     "osc_range": "0.0",
@@ -2793,8 +2767,7 @@ class ControlMain(QtWidgets.QMainWindow):
             self.setGuiValues({"osc_end": screenWidth})
             self.osc_start_ledit.setEnabled(True)
             self.osc_end_ledit.setEnabled(True)
-
-        elif protocol == "vector":
+        elif protocol == CollectionProtocols.VECTOR:
             self.setGuiValues(
                 {
                     "osc_range": getBlConfig("screen_default_width"),
@@ -2808,6 +2781,7 @@ class ControlMain(QtWidgets.QMainWindow):
             if daq_utils.beamline == "fmx":
                 self.calcLifetimeCB()
         else:
+            self.staffScreenDialog.fastDPCheckBox.setChecked(True)
             self.protoOtherRadio.setChecked(True)
         self.totalExpChanged("")
 
@@ -4098,7 +4072,7 @@ class ControlMain(QtWidgets.QMainWindow):
         reqObj["dimple"] = self.dimpleCheckBox.isChecked()
         reqObj["xia2"] = self.xia2CheckBox.isChecked()
         reqObj["protocol"] = str(self.protoComboBox.currentText())
-        if reqObj["protocol"] == "vector" or reqObj["protocol"] == "stepVector":
+        if reqObj["protocol"] in (CollectionProtocols.VECTOR, CollectionProtocols.STEP_VECTOR):
             reqObj["vectorParams"]["fpp"] = int(self.vectorFPP_ledit.text())
         colRequest["request_obj"] = reqObj
         db_lib.updateRequest(colRequest)
@@ -4123,10 +4097,8 @@ class ControlMain(QtWidgets.QMainWindow):
 
     def addRequestsToAllSelectedCB(self):
         invalid_samples = set()
-        if (
-            self.protoComboBox.currentText() == "raster"
-            or self.protoComboBox.currentText() == "stepRaster"
-        ):  # it confused people when they didn't need to add rasters explicitly
+        if self.protoComboBox.currentText() in (CollectionProtocols.RASTER, 
+                                                CollectionProtocols.STEP_RASTER):
             return
         selmod = self.dewarTree.selectionModel()
         selection = selmod.selection()
@@ -4261,7 +4233,7 @@ class ControlMain(QtWidgets.QMainWindow):
         try:
             if (
                 float(self.osc_end_ledit.text()) < float(self.osc_range_ledit.text())
-            ) and str(self.protoComboBox.currentText()) != "eScan":
+            ) and self.protoComboBox.currentText() != CollectionProtocols.E_SCAN:
                 self.popupServerMessage("Osc range less than Osc width")
                 return
         except ValueError:
@@ -4435,8 +4407,7 @@ class ControlMain(QtWidgets.QMainWindow):
                     reqObj["dimple"] = self.dimpleCheckBox.isChecked()
                     reqObj["xia2"] = self.xia2CheckBox.isChecked()
                     if (
-                        reqObj["protocol"] == "characterize"
-                        or reqObj["protocol"] == "ednaCol"
+                        reqObj["protocol"] in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL)
                     ):
                         characterizationParams = {
                             "aimed_completeness": float(
@@ -4496,7 +4467,7 @@ class ControlMain(QtWidgets.QMainWindow):
                 )
                 reqObj["img_width"] = float(self.osc_range_ledit.text())
                 reqObj["exposure_time"] = float(self.exp_time_ledit.text())
-                if rasterDef == None and reqObj["protocol"] != "burn":
+                if rasterDef == None and reqObj["protocol"] != CollectionProtocols.BURN:
                     setBlConfig(
                         "screen_default_width", float(self.osc_range_ledit.text())
                     )
@@ -4563,15 +4534,16 @@ class ControlMain(QtWidgets.QMainWindow):
                 new_distance = 502.0
                 logger.error("set dist to %s in exception handler 1" % new_distance)
                 reqObj["detDist"] = new_distance
-            if reqObj["protocol"] == "multiCol" or reqObj["protocol"] == "multiColQ":
+            if reqObj["protocol"] in (CollectionProtocols.MULTI_COL, 
+                                      CollectionProtocols.MULTI_COL_Q):
                 reqObj["gridStep"] = float(self.rasterStepEdit.text())
                 reqObj["diffCutoff"] = float(self.multiColCutoffEdit.text())
-            if reqObj["protocol"] == "rasterScreen":
+            if reqObj["protocol"] == CollectionProtocols.RASTER_SCREEN:
                 reqObj["gridStep"] = float(self.rasterStepEdit.text())
             if rasterDef != None:
                 reqObj["rasterDef"] = rasterDef
                 reqObj["gridStep"] = float(self.rasterStepEdit.text())
-            if reqObj["protocol"] == "characterize" or reqObj["protocol"] == "ednaCol":
+            if reqObj["protocol"] in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL):
                 characterizationParams = {
                     "aimed_completeness": float(
                         self.characterizeCompletenessEdit.text()
@@ -4581,7 +4553,7 @@ class ControlMain(QtWidgets.QMainWindow):
                     "aimed_ISig": float(self.characterizeISIGEdit.text()),
                 }
                 reqObj["characterizationParams"] = characterizationParams
-            if reqObj["protocol"] == "vector" or reqObj["protocol"] == "stepVector":
+            if reqObj["protocol"] in (CollectionProtocols.VECTOR, CollectionProtocols.STEP_VECTOR):
                 if float(self.osc_end_ledit.text()) < 5.0:
                     self.popupServerMessage(
                         "Vector oscillation must be at least 5.0 degrees."
@@ -4803,8 +4775,8 @@ class ControlMain(QtWidgets.QMainWindow):
         
         self.zoom2Radio.setChecked(True)
         self.zoomLevelToggledCB("Zoom2")
-        self.protoComboBox.setCurrentIndex(self.protoComboBox.findText(str("standard")))
-        self.protoComboActivatedCB("standard")
+        self.protoComboBox.setCurrentText(CollectionProtocols.STANDARD)
+        self.protoComboActivatedCB(CollectionProtocols.STANDARD)
 
     def unmountSampleCB(self):
         logger.info("unmount sample")
@@ -4821,11 +4793,11 @@ class ControlMain(QtWidgets.QMainWindow):
             self.protoComboBox.findText(str(reqObj["protocol"]))
         )
         protocol = str(reqObj["protocol"])
-        if protocol == "raster":
+        if protocol == CollectionProtocols.RASTER:
             self.protoRasterRadio.setChecked(True)
-        elif protocol == "standard":
+        elif protocol == CollectionProtocols.STANDARD:
             self.protoStandardRadio.setChecked(True)
-        elif protocol == "vector":
+        elif protocol == CollectionProtocols.VECTOR:
             self.protoVectorRadio.setChecked(True)
         else:
             self.protoOtherRadio.setChecked(True)
@@ -4862,23 +4834,14 @@ class ControlMain(QtWidgets.QMainWindow):
 
     def refreshCollectionParams(self, selectedSampleRequest, validate_hdf5=True):
         reqObj = selectedSampleRequest["request_obj"]
-        if (
-            str(reqObj["protocol"]) == "characterize"
-            or str(reqObj["protocol"]) == "ednaCol"
-        ):
-            prefix_long = (
-                str(reqObj["directory"]) + "/ref-" + str(reqObj["file_prefix"])
-            )
-        else:
-            prefix_long = str(reqObj["directory"]) + "/" + str(reqObj["file_prefix"])
+        prefix = ""
+        if reqObj["protocol"] in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL):
+            prefix = "ref-"
+        prefix_long = f'{reqObj["directory"]}/{prefix}{reqObj["file_prefix"]}'
         fnumstart = reqObj["file_number_start"]
 
-        if (
-            str(reqObj["protocol"]) == "characterize"
-            or str(reqObj["protocol"]) == "ednaCol"
-            or str(reqObj["protocol"]) == "standard"
-            or str(reqObj["protocol"]) == "vector"
-        ):
+        if reqObj["protocol"] in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL,
+                                  CollectionProtocols.STANDARD, CollectionProtocols.VECTOR):
             if "priority" in selectedSampleRequest:
                 if (
                     selectedSampleRequest["priority"] < 0
@@ -4908,7 +4871,7 @@ class ControlMain(QtWidgets.QMainWindow):
         rasterStep = int(reqObj["gridStep"])
         logger.info("reaching redraw now")
         if not self.hideRastersCheckBox.isChecked() and (
-            reqObj["protocol"] in ("raster", "stepRaster", "multiCol")
+            reqObj["protocol"] in (CollectionProtocols.RASTER, CollectionProtocols.STEP_RASTER, CollectionProtocols.MULTI_COL)
         ):
             #if not self.rasterIsDrawn(selectedSampleRequest):
             # always erase and then draw
@@ -4942,7 +4905,7 @@ class ControlMain(QtWidgets.QMainWindow):
                         ],
                     )
                     
-        if str(reqObj["protocol"]) == "eScan":
+        if reqObj["protocol"] == CollectionProtocols.E_SCAN:
             try:
                 self.escan_steps_ledit.setText(str(reqObj["steps"]))
                 self.escan_stepsize_ledit.setText(str(reqObj["stepsize"]))
@@ -4956,8 +4919,7 @@ class ControlMain(QtWidgets.QMainWindow):
             except KeyError:
                 pass
         elif (
-            str(reqObj["protocol"]) == "characterize"
-            or str(reqObj["protocol"]) == "ednaCol"
+            str(reqObj["protocol"]) in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL)
         ):
             characterizationParams = reqObj["characterizationParams"]
             self.characterizeCompletenessEdit.setText(
@@ -5030,9 +4992,7 @@ class ControlMain(QtWidgets.QMainWindow):
                     str(reqObj["file_number_start"])
                 )
                 if self.vidActionRasterDefRadio.isChecked():
-                    self.protoComboBox.setCurrentIndex(
-                        self.protoComboBox.findText(str("raster"))
-                    )
+                    self.protoComboBox.setCurrentText(CollectionProtocols.RASTER)
                     self.showProtParams()
             else:
                 self.selectedSampleRequest = daq_utils.createDefaultRequest(
@@ -5060,7 +5020,7 @@ class ControlMain(QtWidgets.QMainWindow):
             ):  # Don't fill request data if unmounted sample and queuecollect is off
                 return
             owner = sample["owner"]
-            if reqObj["protocol"] == "eScan":
+            if reqObj["protocol"] == CollectionProtocols.E_SCAN:
                 try:
                     if reqObj["runChooch"]:
                         resultList = db_lib.getResultsforRequest(reqID)
