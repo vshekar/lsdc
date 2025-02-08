@@ -49,6 +49,7 @@ class DewarTree(QtWidgets.QTreeView):
         # Keeps track of whether the user is part of a proposal
         self.proposal_membership = {}
         self.follow_current_request = False
+        self._programmatic_status_update = False
 
     def toggle_follow_request(self, check_state):
         if check_state == Qt.CheckState.Checked:
@@ -145,7 +146,17 @@ class DewarTree(QtWidgets.QTreeView):
             super(DewarTree, self).keyPressEvent(event)
 
     def refreshTree(self):
+        self._programmatic_status_update = True
         self.refreshTreeDewarView()
+        self._programmatic_status_update = False
+
+    def set_unmounted_sample(self, item):
+        item.setForeground(QtGui.QColor("black"))
+        font = QtGui.QFont()
+        font.setUnderline(False)
+        font.setItalic(False)
+        font.setOverline(False)
+        item.setFont(font)
 
     def set_mounted_sample(self, item, sample_name=None):
         # Formats the text of the item that is passed in as the mounted sample
@@ -184,14 +195,15 @@ class DewarTree(QtWidgets.QTreeView):
             item.setData("container", 33)
             if parentItem.rowCount() == i:
                 parentItem.appendRow(item)
-            else:
-                item = parentItem.child(i)
-                #parentItem.takeChild(i,0)
-                #parentItem.setChild(i, 0, item)
+            elif item.data(32) != parentItem.child(i).data(32):
+                # parentItem.takeChild(i,0)
+                parentItem.setChild(i, 0, item)
+            
+            updated_item = parentItem.child(i)
             if puck != "" and puckName != "private":
                 puckContents = puck.get("content", [])
                 self.add_samples_to_puck_tree(
-                    puckContents, item, index_s, sample_data, request_data
+                    puckContents, updated_item, index_s, sample_data, request_data
                 )
         #self.setModel(self.model)
         if not self.initialized:
@@ -228,8 +240,8 @@ class DewarTree(QtWidgets.QTreeView):
                 if parentItem.rowCount() == j:
                     parentItem.appendRow(item)
                 else:
-                    item.takeChild(j, 0)
-                    item.setChild(j, 0, item)
+                    parentItem.takeChild(j, 0)
+                    parentItem.setChild(j, 0, item)
                 continue
 
             sample = sample_data[sample_id]
@@ -256,18 +268,17 @@ class DewarTree(QtWidgets.QTreeView):
                 item = QtGui.QStandardItem(
                     QtGui.QIcon(ICON),
                     position_s,
-                    )
-                # just stuck sampleID there, but negate it to diff from reqID
-                item.setData(sample_id, 32)
-                item.setData("sample", 33)
+                )
                 parentItem.appendRow(item)
             else:
                 item = parentItem.child(j)
-                item.setText(position_s)
-                item.setData(sample_id, 32)
-                item.setData("sample", 33)
+            item.setText(position_s)
+            item.setData(sample_id, 32)
+            item.setData("sample", 33)
             if sample_id == self.parent.mountedPin_pv.get():
-                self.set_mounted_sample(item)
+                self.set_mounted_sample(item, position_s)
+            else:
+                self.set_unmounted_sample(item)
             if sample_id == self.parent.mountedPin_pv.get():
                 mountedIndex = self.model.indexFromItem(item)
             # looking for the selected item
@@ -308,13 +319,16 @@ class DewarTree(QtWidgets.QTreeView):
                 collectionRunning = True
 
             if item.rowCount() == idx:
+                item_idx = self.model.indexFromItem(item)
+                self.expand(item_idx)
                 item.appendRow(col_item)
             else:
                 current_child = item.child(idx)
                 if current_child.data(32) == col_item.data(32):
-                    if current_child.data(34) != col_item.data(34):
-                        self.update_item_priority(current_child, request)
-                        item.setChild(idx, 0, col_item)
+                    #if current_child.data(34) != col_item.data(34):
+                    current_child = self.update_item_priority(current_child, request)
+                    item.setChild(idx, 0, current_child)
+                        #item.setChild(idx, 0, col_item)
                 else:
                     item.removeRow(idx)
                     item.setChild(idx, 0, col_item)
@@ -366,6 +380,7 @@ class DewarTree(QtWidgets.QTreeView):
         return col_item
 
     def update_item_priority(self, col_item, request):
+        col_item.setData(request["priority"],34)
         if col_item.data(34) == 99999:
             col_item.setCheckState(Qt.CheckState.Checked)
             col_item.setBackground(QtGui.QColor("green"))
@@ -375,6 +390,7 @@ class DewarTree(QtWidgets.QTreeView):
             col_item.setBackground(QtGui.QColor("white"))
         elif col_item.data(34) < 0:
             col_item.setCheckable(False)
+            col_item.setData(None, Qt.CheckStateRole)
             col_item.setBackground(QtGui.QColor("cyan"))
         else:
             col_item.setCheckState(Qt.CheckState.Unchecked)
@@ -479,18 +495,23 @@ class DewarTree(QtWidgets.QTreeView):
         self.expandAll()
 
     def queueSelectedSample(self, item):
-        if item.data(33) == "request":
-            reqID = str(item.data(32))
-            checkedSampleRequest = db_lib.getRequestByID(reqID)  # line not needed???
-            if item.checkState() == Qt.Checked:
-                db_lib.updatePriority(reqID, 5000)
-            else:
-                db_lib.updatePriority(reqID, 0)
-            item.setBackground(QtGui.QColor("white"))
-            self.parent.treeChanged_pv.put(
-                #self.parent.processID
-                1
-            )  # the idea is touch the pv, but have this gui instance not refresh
+        if self._programmatic_status_update:
+            return
+        if self.parent.controlEnabled():
+            if item.data(33) == "request":
+                reqID = str(item.data(32))
+                if item.checkState() == Qt.Checked:
+                    db_lib.updatePriority(reqID, 5000)
+                else:
+                    db_lib.updatePriority(reqID, 0)
+                item.setBackground(QtGui.QColor("white"))
+                self.parent.treeChanged_pv.put(
+                    self.parent.processID
+                    #1
+                )  # the idea is touch the pv, but have this gui instance not refresh
+        else:
+            self.refreshTree()
+            self.parent.popupServerMessage("You don't have control")
 
     def queueAllSelectedCB(self):
         selmod = self.selectionModel()

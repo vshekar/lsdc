@@ -409,12 +409,14 @@ class ControlMain(QtWidgets.QMainWindow):
         hBoxTreeButtsLayout = QtWidgets.QHBoxLayout()
         vBoxTreeButtsLayoutLeft = QtWidgets.QVBoxLayout()
         vBoxTreeButtsLayoutRight = QtWidgets.QVBoxLayout()
+        vBoxTreeButtsLayoutLeft.addWidget(expandAllButton)
         vBoxTreeButtsLayoutLeft.addWidget(runQueueButton)
         vBoxTreeButtsLayoutLeft.addWidget(mountSampleButton)
         vBoxTreeButtsLayoutLeft.addWidget(self.pauseQueueButton)
         vBoxTreeButtsLayoutLeft.addWidget(queueSelectedButton)
         vBoxTreeButtsLayoutLeft.addWidget(self.popUserScreen)
         vBoxTreeButtsLayoutLeft.addWidget(warmupButton)
+        vBoxTreeButtsLayoutRight.addWidget(collapseAllButton)
         vBoxTreeButtsLayoutRight.addWidget(self.closeShutterButton)
         vBoxTreeButtsLayoutRight.addWidget(unmountSampleButton)
         vBoxTreeButtsLayoutRight.addWidget(self.parkRobotButton)
@@ -4173,13 +4175,8 @@ class ControlMain(QtWidgets.QMainWindow):
 
     def addSampleRequestCB(self, rasterDef=None, selectedSampleID=None):
         if self.selectedSampleID != None:
-            try:
-                sample = db_lib.getSampleByID(self.selectedSampleID)
-                propNum = sample["proposalID"]
-            except KeyError:
-                propNum = 999999
-            if propNum == None:
-                propNum = 999999
+            sample = db_lib.getSampleByID(self.selectedSampleID)
+            propNum = sample.get("proposalID", 999999)
             if propNum != daq_utils.getProposalID():
                 logger.info("setting proposal in add request")
                 daq_utils.setProposalID(propNum, createVisit=True)
