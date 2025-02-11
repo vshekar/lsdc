@@ -1,4 +1,4 @@
-from qtpy.QtCore import QThread, QTimer, QEventLoop, Signal, QPoint, Qt, QObject
+from qtpy.QtCore import QThread, Signal, QPoint, Qt, QObject, QRunnable
 from qtpy import QtGui
 from PIL import Image, ImageQt
 import os
@@ -134,3 +134,28 @@ class ServerCheckThread(QThread):
                 self.visit_dir_changed.emit()
                 break
             self.msleep(self.delay)
+
+
+class SignalObject(QObject):
+    finished = Signal(object)
+
+class DataFetchRunnable(QRunnable):
+    def __init__(self, run_function, *args, **kwargs):
+        """
+        Initialize the runnable with a custom function.
+        
+        :param run_function: A callable to execute in the run() method.
+        :param args: Positional arguments to pass to run_function.
+        :param kwargs: Keyword arguments to pass to run_function.
+        """
+        super(DataFetchRunnable, self).__init__()
+        self.run_function = run_function
+        self.args = args
+        self.kwargs = kwargs
+        self.signal = SignalObject()
+
+    def run(self):
+        # Execute the provided function with its arguments.
+        result = self.run_function(*self.args, **self.kwargs)
+        # Emit the finished signal with the result.
+        self.signal.finished.emit(result)

@@ -5317,7 +5317,7 @@ class ControlMain(QtWidgets.QMainWindow):
         self.beamSize_pv.add_callback(self.beamSizeChangedCB)
 
         self.treeChanged_pv = PV(daq_utils.beamlineComm + "live_q_change_flag")
-        self.refreshTreeSignal.connect(self.dewarTree.refreshTree)
+        self.refreshTreeSignal.connect(self.dewarTree.refreshTreeThreaded)
         self.treeChanged_pv.add_callback(self.treeChangedCB)
         self.mountedPin_pv = custom_pv.MountedPinPV(daq_utils.beamlineComm + "mounted_pin")
         self.mountedPinSignal.connect(self.processMountedPin)

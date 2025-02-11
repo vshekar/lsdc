@@ -16,6 +16,7 @@ from config_params import (
     SAMPLE_TIMER_DELAY,
     MountState
 )
+from threads import DataFetchRunnable
 
 if typing.TYPE_CHECKING:
     from lsdcGui import ControlMain
@@ -50,6 +51,8 @@ class DewarTree(QtWidgets.QTreeView):
         self.proposal_membership = {}
         self.follow_current_request = False
         self._programmatic_status_update = False
+        self.threadPool = QtCore.QThreadPool.globalInstance()
+        self.refresh_running = False
 
     def toggle_follow_request(self, check_state):
         if check_state == Qt.CheckState.Checked:
@@ -150,6 +153,32 @@ class DewarTree(QtWidgets.QTreeView):
         self.refreshTreeDewarView()
         self._programmatic_status_update = False
 
+    def refreshTreeThreaded(self):
+        if self.refresh_running:
+            # A refresh is already running, so ignore the new request.
+            return
+
+        self.refresh_running = True  # Mark that a refresh is in progress
+        self.runnable = DataFetchRunnable(self.fetchData)
+        self.runnable.signal.finished.connect(self.update_model)
+        self.threadPool.start(self.runnable)
+
+    def fetchData(self):
+        """
+        This method performs the heavy data retrieval.
+        It must not interact with any GUI elements.
+        """
+        dewar_data, puck_data, sample_data, request_data = db_lib.get_dewar_tree_data(
+            daq_utils.primaryDewarName, daq_utils.beamline, get_latest_pucks=False
+        )
+        # Return the fetched data in a convenient container.
+        return {
+            "dewar_data": dewar_data,
+            "puck_data": puck_data,
+            "sample_data": sample_data,
+            "request_data": request_data,
+        }
+
     def set_unmounted_sample(self, item):
         item.setForeground(QtGui.QColor("black"))
         font = QtGui.QFont()
@@ -179,6 +208,20 @@ class DewarTree(QtWidgets.QTreeView):
         dewar_data, puck_data, sample_data, request_data = db_lib.get_dewar_tree_data(
             daq_utils.primaryDewarName, daq_utils.beamline, get_latest_pucks
         )
+        data = {
+            "dewar_data": dewar_data,
+            "puck_data": puck_data,
+            "sample_data": sample_data,
+            "request_data": request_data,
+        }
+        self.update_model(data)
+
+    def update_model(self, data):
+        self._programmatic_status_update = True
+        dewar_data = data["dewar_data"]
+        puck_data = data["puck_data"]
+        sample_data = data["sample_data"]
+        request_data = data["request_data"]
         parentItem = self.model.invisibleRootItem()
         for i, puck_id in enumerate(
             dewar_data["content"]
@@ -209,13 +252,8 @@ class DewarTree(QtWidgets.QTreeView):
         if not self.initialized:
             self.expandAll()
             self.initialized = True
-        """
-        if self.isExpanded:
-            
-        else:
-            self.collapseAll()
-        self.scrollTo(self.currentIndex(), QtWidgets.QAbstractItemView.PositionAtCenter)
-        """
+        self._programmatic_status_update = False
+        self.refresh_running = False
 
     def add_samples_to_puck_tree(
         self,
