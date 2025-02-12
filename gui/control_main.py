@@ -783,48 +783,7 @@ class ControlMain(QtWidgets.QMainWindow):
         self.hBoxMultiColParamsLayout1.addWidget(multiColCutoffLabel)
         self.hBoxMultiColParamsLayout1.addWidget(self.multiColCutoffEdit)
         self.multiColParamsFrame.setLayout(self.hBoxMultiColParamsLayout1)
-        self.characterizeParamsFrame = QFrame()
-        vBoxCharacterizeParams1 = QtWidgets.QVBoxLayout()
-        self.hBoxCharacterizeLayout1 = QtWidgets.QHBoxLayout()
-        self.characterizeTargetLabel = QtWidgets.QLabel("Characterization Targets")
-        characterizeResoLabel = QtWidgets.QLabel("Resolution")
-        characterizeResoLabel.setAlignment(QtCore.Qt.AlignCenter)
-        self.characterizeResoEdit = QtWidgets.QLineEdit("3.0")
-        characterizeISIGLabel = QtWidgets.QLabel("I/Sigma")
-        characterizeISIGLabel.setAlignment(QtCore.Qt.AlignCenter)
-        self.characterizeISIGEdit = QtWidgets.QLineEdit("2.0")
-        self.characterizeAnomCheckBox = QCheckBox("Anomolous")
-        self.characterizeAnomCheckBox.setChecked(False)
-        self.hBoxCharacterizeLayout2 = QtWidgets.QHBoxLayout()
-        characterizeCompletenessLabel = QtWidgets.QLabel("Completeness")
-        characterizeCompletenessLabel.setAlignment(QtCore.Qt.AlignCenter)
-        self.characterizeCompletenessEdit = QtWidgets.QLineEdit("0.99")
-        characterizeMultiplicityLabel = QtWidgets.QLabel("Multiplicity")
-        characterizeMultiplicityLabel.setAlignment(QtCore.Qt.AlignCenter)
-        self.characterizeMultiplicityEdit = QtWidgets.QLineEdit("auto")
-        characterizeDoseLimitLabel = QtWidgets.QLabel("Dose Limit")
-        characterizeDoseLimitLabel.setAlignment(QtCore.Qt.AlignCenter)
-        self.characterizeDoseLimitEdit = QtWidgets.QLineEdit("100")
-        characterizeSpaceGroupLabel = QtWidgets.QLabel("Space Group")
-        characterizeSpaceGroupLabel.setAlignment(QtCore.Qt.AlignCenter)
-        self.characterizeSpaceGroupEdit = QtWidgets.QLineEdit("P1")
-        self.hBoxCharacterizeLayout1.addWidget(characterizeResoLabel)
-        self.hBoxCharacterizeLayout1.addWidget(self.characterizeResoEdit)
-        self.hBoxCharacterizeLayout1.addWidget(characterizeISIGLabel)
-        self.hBoxCharacterizeLayout1.addWidget(self.characterizeISIGEdit)
-        self.hBoxCharacterizeLayout1.addWidget(characterizeSpaceGroupLabel)
-        self.hBoxCharacterizeLayout1.addWidget(self.characterizeSpaceGroupEdit)
-        self.hBoxCharacterizeLayout1.addWidget(self.characterizeAnomCheckBox)
-        self.hBoxCharacterizeLayout2.addWidget(characterizeCompletenessLabel)
-        self.hBoxCharacterizeLayout2.addWidget(self.characterizeCompletenessEdit)
-        self.hBoxCharacterizeLayout2.addWidget(characterizeMultiplicityLabel)
-        self.hBoxCharacterizeLayout2.addWidget(self.characterizeMultiplicityEdit)
-        self.hBoxCharacterizeLayout2.addWidget(characterizeDoseLimitLabel)
-        self.hBoxCharacterizeLayout2.addWidget(self.characterizeDoseLimitEdit)
-        vBoxCharacterizeParams1.addWidget(self.characterizeTargetLabel)
-        vBoxCharacterizeParams1.addLayout(self.hBoxCharacterizeLayout1)
-        vBoxCharacterizeParams1.addLayout(self.hBoxCharacterizeLayout2)
-        self.characterizeParamsFrame.setLayout(vBoxCharacterizeParams1)
+
         self.vectorParamsFrame = QFrame()
         hBoxVectorLayout1 = QtWidgets.QHBoxLayout()
         setVectorStartButton = QtWidgets.QPushButton("Vector\nStart")
@@ -884,13 +843,11 @@ class ControlMain(QtWidgets.QMainWindow):
         improvedParamSpacing.addWidget(self.rasterParamsFrame)
         improvedParamSpacing.addWidget(self.multiColParamsFrame)
         improvedParamSpacing.addWidget(self.vectorParamsFrame)
-        improvedParamSpacing.addWidget(self.characterizeParamsFrame)
         improvedParamSpacing.addWidget(self.processingOptionsFrame)
         paramsGridGB.setLayout(improvedParamSpacing)
 
         self.rasterParamsFrame.hide()
         self.multiColParamsFrame.hide()
-        self.characterizeParamsFrame.hide()
         colParamsGB.setLayout(vBoxColParams1)
         self.dataPathGB = DataLocInfo(self)
         hBoxDisplayOptionLayout= QtWidgets.QHBoxLayout()        
@@ -2458,7 +2415,6 @@ class ControlMain(QtWidgets.QMainWindow):
     def showProtParams(self):
         protocol = str(self.protoComboBox.currentText())
         self.rasterParamsFrame.hide()
-        self.characterizeParamsFrame.hide()
         self.processingOptionsFrame.hide()
         self.multiColParamsFrame.hide()
         self.osc_start_ledit.setEnabled(True)
@@ -2478,9 +2434,6 @@ class ControlMain(QtWidgets.QMainWindow):
             self.multiColParamsFrame.show()
         elif protocol in (CollectionProtocols.VECTOR, CollectionProtocols.STEP_VECTOR):
             self.vectorParamsFrame.show()
-            self.processingOptionsFrame.show()
-        elif protocol in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL):
-            self.characterizeParamsFrame.show()
             self.processingOptionsFrame.show()
         elif protocol in (CollectionProtocols.STANDARD, CollectionProtocols.BURN):
             self.processingOptionsFrame.show()
@@ -4365,20 +4318,6 @@ class ControlMain(QtWidgets.QMainWindow):
                     reqObj["fastEP"] = self.fastEPCheckBox.isChecked()
                     reqObj["dimple"] = self.dimpleCheckBox.isChecked()
                     reqObj["xia2"] = self.xia2CheckBox.isChecked()
-                    if (
-                        reqObj["protocol"] in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL)
-                    ):
-                        characterizationParams = {
-                            "aimed_completeness": float(
-                                self.characterizeCompletenessEdit.text()
-                            ),
-                            "aimed_multiplicity": str(
-                                self.characterizeMultiplicityEdit.text()
-                            ),
-                            "aimed_resolution": float(self.characterizeResoEdit.text()),
-                            "aimed_ISig": float(self.characterizeISIGEdit.text()),
-                        }
-                        reqObj["characterizationParams"] = characterizationParams
                     colRequest["request_obj"] = reqObj
                     newSampleRequestID = db_lib.addRequesttoSample(
                         self.selectedSampleID,
@@ -4502,16 +4441,6 @@ class ControlMain(QtWidgets.QMainWindow):
             if rasterDef != None:
                 reqObj["rasterDef"] = rasterDef
                 reqObj["gridStep"] = float(self.rasterStepEdit.text())
-            if reqObj["protocol"] in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL):
-                characterizationParams = {
-                    "aimed_completeness": float(
-                        self.characterizeCompletenessEdit.text()
-                    ),
-                    "aimed_multiplicity": str(self.characterizeMultiplicityEdit.text()),
-                    "aimed_resolution": float(self.characterizeResoEdit.text()),
-                    "aimed_ISig": float(self.characterizeISIGEdit.text()),
-                }
-                reqObj["characterizationParams"] = characterizationParams
             if reqObj["protocol"] in (CollectionProtocols.VECTOR, CollectionProtocols.STEP_VECTOR):
                 if float(self.osc_end_ledit.text()) < 5.0:
                     self.popupServerMessage(
@@ -4794,13 +4723,10 @@ class ControlMain(QtWidgets.QMainWindow):
     def refreshCollectionParams(self, selectedSampleRequest, validate_hdf5=True):
         reqObj = selectedSampleRequest["request_obj"]
         prefix = ""
-        if reqObj["protocol"] in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL):
-            prefix = "ref-"
         prefix_long = f'{reqObj["directory"]}/{prefix}{reqObj["file_prefix"]}'
         fnumstart = reqObj["file_number_start"]
 
-        if reqObj["protocol"] in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL,
-                                  CollectionProtocols.STANDARD, CollectionProtocols.VECTOR):
+        if reqObj["protocol"] in (CollectionProtocols.STANDARD, CollectionProtocols.VECTOR):
             if "priority" in selectedSampleRequest:
                 if (
                     selectedSampleRequest["priority"] < 0
@@ -4877,20 +4803,6 @@ class ControlMain(QtWidgets.QMainWindow):
                 self.periodicTable.elementClicked(reqObj["element"])
             except KeyError:
                 pass
-        elif (
-            str(reqObj["protocol"]) in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL)
-        ):
-            characterizationParams = reqObj["characterizationParams"]
-            self.characterizeCompletenessEdit.setText(
-                str(characterizationParams["aimed_completeness"])
-            )
-            self.characterizeISIGEdit.setText(str(characterizationParams["aimed_ISig"]))
-            self.characterizeResoEdit.setText(
-                str(characterizationParams["aimed_resolution"])
-            )
-            self.characterizeMultiplicityEdit.setText(
-                str(characterizationParams["aimed_multiplicity"])
-            )
         else:  # for now, erase the rasters if a non-raster is selected, need to rationalize later
             pass
         self.showProtParams()

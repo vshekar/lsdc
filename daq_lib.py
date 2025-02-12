@@ -659,60 +659,13 @@ def collectData(currentRequest):
           sweep_start = reqObj["sweep_start"]
       daq_macros.setTrans(attenuation)      
 
-    if (reqObj["protocol"] in (CollectionProtocols.CHARACTERIZE, CollectionProtocols.EDNA_COL):
-      characterizationParams = reqObj["characterizationParams"]
-      index_success = daq_macros.dna_execute_collection3(0.0,img_width,2,exposure_period,data_directory_name+"/",file_prefix,1,-89.0,1,currentRequest)
-      if (index_success):        
-        resultsList = db_lib.getResultsforRequest(currentRequest["uid"]) # because for testing I keep running the same request. Probably not in usual use.
-        results = None
-        for i in range(0,len(resultsList)):
-          if (resultsList[i]['result_type'] == 'characterizationStrategy'):
-            results = resultsList[i]
-            break
-        if (results != None):
-          
-          strategyResults = results["result_obj"]["strategy"]
-          stratStart = strategyResults["start"]
-          stratEnd = strategyResults["end"]
-          stratWidth = strategyResults["width"]
-          stratExptime = strategyResults["exptime"]
-          stratTrans = strategyResults["transmission"]          
-          stratDetDist = strategyResults["detDist"]
-          sampleID = currentRequest["sample"]
-          tempnewStratRequest = daq_utils.createDefaultRequest(sampleID)
-          newReqObj = tempnewStratRequest["request_obj"]
-          newReqObj["sweep_start"] = stratStart
-          newReqObj["sweep_end"] = stratEnd
-          newReqObj["img_width"] = stratWidth
-          newReqObj["exposure_time"] = stratExptime
-          newReqObj["attenuation"] = stratTrans
-          newReqObj["detDist"] = stratDetDist
-          newReqObj["directory"] = data_directory_name
-          newReqObj["pos_x"] = beamline_lib.motorPosFromDescriptor("sampleX")
-          newReqObj["pos_y"] = beamline_lib.motorPosFromDescriptor("sampleY")
-          newReqObj["pos_z"] = beamline_lib.motorPosFromDescriptor("sampleZ")
-          newReqObj["fastDP"] = True # this is where you might want a "new from old" request to carry over stuff like this.
-          newReqObj["fastEP"] = reqObj["fastEP"]
-          newReqObj["dimple"] = reqObj["dimple"]                
-          newReqObj["xia2"] = reqObj["xia2"]
-          runNum = db_lib.incrementSampleRequestCount(sampleID)
-          newReqObj["runNum"] = runNum
-          newStratRequest = db_lib.addRequesttoSample(sampleID,newReqObj["protocol"],daq_utils.owner,newReqObj,priority=0,proposalID=daq_utils.getProposalID())
-          if (reqObj["protocol"] == CollectionProtocols.EDNA_COL):
-            logger.info("new strat req = ")
-            logger.info(newStratRequest)
-            db_lib.updatePriority(currentRequest["uid"],-1)
-            refreshGuiTree()
-            collectData(db_lib.getRequestByID(newStratRequest))
-            return 1
-    else: #standard
-      logger.info("moving omega to start " + str(time.time()))      
-      if daq_utils.beamline == "nyx":
-          direction = (sweep_end - sweep_start) / abs(sweep_end - sweep_start)
-          beamline_lib.mvaDescriptor("omega",sweep_start - direction*0.05)
-      else:
-          beamline_lib.mvaDescriptor("omega",sweep_start)
-      collect_detector_seq_hw(sweep_start,range_degrees,img_width,exposure_period,file_prefix,data_directory_name,file_number_start,currentRequest)
+    logger.info("moving omega to start " + str(time.time()))      
+    if daq_utils.beamline == "nyx":
+        direction = (sweep_end - sweep_start) / abs(sweep_end - sweep_start)
+        beamline_lib.mvaDescriptor("omega",sweep_start - direction*0.05)
+    else:
+        beamline_lib.mvaDescriptor("omega",sweep_start)
+    collect_detector_seq_hw(sweep_start,range_degrees,img_width,exposure_period,file_prefix,data_directory_name,file_number_start,currentRequest)
   try:
     if (logMe) and prot == CollectionProtocols.RASTER:
       logMxRequestParams(currentRequest,wait=False)
@@ -817,8 +770,7 @@ def collect_detector_seq_hw(sweep_start,range_degrees,image_width,exposure_perio
       elif (protocol == CollectionProtocols.VECTOR):
         RE(daq_macros.vector_plan_wrapped(currentRequest))
   else:  
-    if (protocol in (CollectionProtocols.STANDARD, CollectionProtocols.CHARACTERIZE,
-                     CollectionProtocols.EDNA_COL, CollectionProtocols.BURN):
+    if (protocol in (CollectionProtocols.STANDARD, CollectionProtocols.BURN):
       logger.info("vectorSync " + str(time.time()))    
       daq_macros.vectorSync()
       logger.info("zebraDaq " + str(time.time()))
