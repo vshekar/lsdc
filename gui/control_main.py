@@ -3648,6 +3648,20 @@ class ControlMain(QtWidgets.QMainWindow):
         setBlConfig("rasterDefaultTime", float(self.exp_time_ledit.text()))
         setBlConfig("rasterDefaultTrans", float(self.transmission_ledit.text()))
 
+
+        self.selectedSampleID = self.mountedPin_pv.get()
+        sample_data = db_lib.getSampleByID(self.selectedSampleID)
+        prop_dir = self.get_proposal_directory(sample_data["proposalID"])
+
+        self.selectedSampleRequest = daq_utils.createDefaultRequest(
+            self.selectedSampleID
+        )
+        self.dataPathGB.setFilePrefix_ledit(
+            str(self.selectedSampleRequest["request_obj"]["file_prefix"])
+        )
+        self.dataPathGB.setDataPath_ledit(
+            str(self.selectedSampleRequest["request_obj"]["directory"])
+        )
         self.addSampleRequestCB(rasterDef)
         return  # short circuit
 

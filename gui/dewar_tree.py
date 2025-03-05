@@ -53,10 +53,18 @@ class DewarTree(QtWidgets.QTreeView):
         self._programmatic_status_update = False
         self.threadPool = QtCore.QThreadPool.globalInstance()
         self.refresh_running = False
+        self.expanded.connect(self.on_expanded)
+
+    def on_expanded(self, index):
+        for row in range(self.model.rowCount(index)):
+            child_index = self.model.index(row, 0, index)
+            self.expand(child_index)
+        
 
     def toggle_follow_request(self, check_state):
         if check_state == Qt.CheckState.Checked:
             self.follow_current_request = True
+            self.refreshTree()
         else:
             self.follow_current_request = False
 
