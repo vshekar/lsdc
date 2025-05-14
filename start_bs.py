@@ -9,6 +9,13 @@ import os
 from mxtools.governor import _make_governors
 from ophyd.signal import EpicsSignalBase
 EpicsSignalBase.set_defaults(timeout=10, connection_timeout=10)  # new style
+import redis
+from redis_json_dict import RedisJSONDict
+
+# setup RedisJsonDict
+uri = f"info.{os.environ['BEAMLINE_ID']}.nsls2.bnl.gov"
+# Provide an endstation prefix, if needed, with a trailing "-"
+new_md = RedisJSONDict(redis.Redis(uri),prefix="lsdc-")
 
 #12/19 - author unknown. DAMA can help
 """
@@ -34,15 +41,13 @@ plt.ion()
 import bluesky.plans as bp
 
 from bluesky.run_engine import RunEngine
-from bluesky.utils import get_history, PersistentDict
 RE = RunEngine()
 beamline = os.environ["BEAMLINE_ID"]
 from nslsii import configure_kafka_publisher
 configure_kafka_publisher(RE, beamline)
-configdir = os.environ['CONFIGDIR']
-RE.md = PersistentDict('%s%s_bluesky_config' % (configdir, beamline))
 from databroker import Broker
 db = Broker.named(beamline)
+RE.md = new_md
 
 RE.subscribe(db.insert)
 
