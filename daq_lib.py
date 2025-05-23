@@ -660,11 +660,7 @@ def collectData(currentRequest):
       daq_macros.setTrans(attenuation)      
 
     logger.info("moving omega to start " + str(time.time()))      
-    if daq_utils.beamline == "nyx":
-        direction = (sweep_end - sweep_start) / abs(sweep_end - sweep_start)
-        beamline_lib.mvaDescriptor("omega",sweep_start - direction*0.05)
-    else:
-        beamline_lib.mvaDescriptor("omega",sweep_start)
+    beamline_lib.mvaDescriptor("omega",sweep_start)
     collect_detector_seq_hw(sweep_start,range_degrees,img_width,exposure_period,file_prefix,data_directory_name,file_number_start,currentRequest)
   try:
     if (logMe) and prot == CollectionProtocols.RASTER:
@@ -682,50 +678,49 @@ def collectData(currentRequest):
   if reqObj["protocol"] in (CollectionProtocols.STANDARD, CollectionProtocols.VECTOR, CollectionProtocols.RASTER):
     send_kafka_message(topic=f'{daq_utils.beamline}.lsdc.documents', event='stop', uuid=currentRequest['uid'], protocol=reqObj["protocol"])
   if prot in (CollectionProtocols.VECTOR, CollectionProtocols.STANDARD, CollectionProtocols.STEP_VECTOR):
-    if daq_utils.beamline != "nyx":
-      seqNum = flyer.detector.cam.sequence_id.get()
-      comm_s = os.environ["LSDCHOME"] + "/runSpotFinder4syncW.py " + data_directory_name + " " + file_prefix + " " + str(currentRequest["uid"]) + " " + str(seqNum) + " " + str(currentIspybDCID)+ "&"
-      logger.info(f"NOT running spotfinding for per-image analysis in Synchweb: {comm_s}")
-      #os.system(comm_s)    
-      filename = f"{data_directory_name}/{file_prefix}_{seqNum}_master.h5"
-      logger.info(f"Checking integrity of {filename}")
-      timeout_index = 0
-      while not validation.validate_master_HDF5_file(filename):
-        timeout_index += 1
-        time.sleep(3)
-        if timeout_index > 15:
-          logger.error(f"Unable to verify master file after {timeout_index} tries, not proceeding with processing")
-          return 
-      if img_width > 0: #no dataset processing in stills mode
-        if (reqObj["fastDP"]):
-          if (reqObj["fastEP"]):
-            fastEPFlag = 1
-          else:
-            fastEPFlag = 0
-          if (reqObj["dimple"]):
-            dimpleFlag = 1
-          else:
-            dimpleFlag = 0        
-          nodeName = "fastDPNode" + str((fastDPNodeCounter%fastDPNodeCount)+1)
-          fastDPNodeCounter+=1
-          node = getBlConfig(nodeName)      
-          dimpleNode = getBlConfig("dimpleNode")      
-          if (daq_utils.detector_id == "EIGER-16"):
-            seqNum = flyer.detector.cam.sequence_id.get()
-            comm_s = os.environ["LSDCHOME"] + "/runFastDPH5.py " + data_directory_name + " " + str(seqNum) + " " + str(currentRequest["uid"]) + " " + str(fastEPFlag) + " " + node + " " + str(dimpleFlag) + " " + dimpleNode + " " + str(currentIspybDCID)+ "&"
-          else:
-            comm_s = os.environ["LSDCHOME"] + "/runFastDP.py " + data_directory_name + " " + file_prefix + " " + str(file_number_start) + " " + str(int(round(range_degrees/img_width))) + " " + str(currentRequest["uid"]) + " " + str(fastEPFlag) + " " + node + " " + str(dimpleFlag) + " " + dimpleNode + "&"
-          logger.info(f'Running fastdp command: {comm_s}')
-          if daq_utils.beamline in ("amx", "fmx"):
-            visitName = daq_utils.getVisitName()
-            if (not os.path.exists(visitName + "/fast_dp_dir")) or subprocess.run(['pgrep', '-f', 'loop-fdp-dple-populate'], stdout=subprocess.PIPE).returncode == 1:  # for pgrep, return of 1 means string not found
-              os.system("killall -KILL loop-fdp-dple-populate")
-              logger.info('starting fast dp result gathering script')
-              os.system("cd " + visitName + ";${LSDCHOME}/bin/loop-fdp-dple-populate.sh&")
-          os.system(comm_s)
-        if (reqObj["xia2"]):
-          comm_s = f"ssh -q xf17id2-srv1 \"{os.environ['MXPROCESSINGSCRIPTSDIR']}xia2.sh {currentRequest['uid']} \"&"
-          os.system(comm_s)
+    seqNum = flyer.detector.cam.sequence_id.get()
+    comm_s = os.environ["LSDCHOME"] + "/runSpotFinder4syncW.py " + data_directory_name + " " + file_prefix + " " + str(currentRequest["uid"]) + " " + str(seqNum) + " " + str(currentIspybDCID)+ "&"
+    logger.info(f"NOT running spotfinding for per-image analysis in Synchweb: {comm_s}")
+    #os.system(comm_s)    
+    filename = f"{data_directory_name}/{file_prefix}_{seqNum}_master.h5"
+    logger.info(f"Checking integrity of {filename}")
+    timeout_index = 0
+    while not validation.validate_master_HDF5_file(filename):
+      timeout_index += 1
+      time.sleep(3)
+      if timeout_index > 15:
+        logger.error(f"Unable to verify master file after {timeout_index} tries, not proceeding with processing")
+        return 
+    if img_width > 0: #no dataset processing in stills mode
+      if (reqObj["fastDP"]):
+        if (reqObj["fastEP"]):
+          fastEPFlag = 1
+        else:
+          fastEPFlag = 0
+        if (reqObj["dimple"]):
+          dimpleFlag = 1
+        else:
+          dimpleFlag = 0        
+        nodeName = "fastDPNode" + str((fastDPNodeCounter%fastDPNodeCount)+1)
+        fastDPNodeCounter+=1
+        node = getBlConfig(nodeName)      
+        dimpleNode = getBlConfig("dimpleNode")      
+        if (daq_utils.detector_id == "EIGER-16"):
+          seqNum = flyer.detector.cam.sequence_id.get()
+          comm_s = os.environ["LSDCHOME"] + "/runFastDPH5.py " + data_directory_name + " " + str(seqNum) + " " + str(currentRequest["uid"]) + " " + str(fastEPFlag) + " " + node + " " + str(dimpleFlag) + " " + dimpleNode + " " + str(currentIspybDCID)+ "&"
+        else:
+          comm_s = os.environ["LSDCHOME"] + "/runFastDP.py " + data_directory_name + " " + file_prefix + " " + str(file_number_start) + " " + str(int(round(range_degrees/img_width))) + " " + str(currentRequest["uid"]) + " " + str(fastEPFlag) + " " + node + " " + str(dimpleFlag) + " " + dimpleNode + "&"
+        logger.info(f'Running fastdp command: {comm_s}')
+        if daq_utils.beamline in ("amx", "fmx"):
+          visitName = daq_utils.getVisitName()
+          if (not os.path.exists(visitName + "/fast_dp_dir")) or subprocess.run(['pgrep', '-f', 'loop-fdp-dple-populate'], stdout=subprocess.PIPE).returncode == 1:  # for pgrep, return of 1 means string not found
+            os.system("killall -KILL loop-fdp-dple-populate")
+            logger.info('starting fast dp result gathering script')
+            os.system("cd " + visitName + ";${LSDCHOME}/bin/loop-fdp-dple-populate.sh&")
+        os.system(comm_s)
+      if (reqObj["xia2"]):
+        comm_s = f"ssh -q xf17id2-srv1 \"{os.environ['MXPROCESSINGSCRIPTSDIR']}xia2.sh {currentRequest['uid']} \"&"
+        os.system(comm_s)
   
   logger.info('processing should be triggered')
   db_lib.updatePriority(currentRequest["uid"],-1)
@@ -763,27 +758,18 @@ def collect_detector_seq_hw(sweep_start,range_degrees,image_width,exposure_perio
 
   logger.info("collect %f degrees for %f seconds %d images exposure_period = %f exposure_time = %f" % (range_degrees,range_seconds,number_of_images,exposure_period,exposure_time))
   
-  if OPHYD_COLLECTIONS[daq_utils.beamline]:
-      logger.info("ophyd collections enabled")
-      if (protocol == CollectionProtocols.STANDARD):
-        RE(daq_macros.standard_plan_wrapped(currentRequest))
-      elif (protocol == CollectionProtocols.VECTOR):
-        RE(daq_macros.vector_plan_wrapped(currentRequest))
-  else:  
-    if (protocol in (CollectionProtocols.STANDARD, CollectionProtocols.BURN):
-      logger.info("vectorSync " + str(time.time()))    
-      daq_macros.vectorSync()
-      logger.info("zebraDaq " + str(time.time()))
-    
-      vector_params = daq_macros.gatherStandardVectorParams()
-      logger.debug(f"vector_params: {vector_params}") 
-      RE(daq_macros.standard_zebra_plan(flyer,angleStart,number_of_images,range_degrees,image_width,exposure_period,file_prefix_minus_directory,data_directory_name,file_number, vector_params, file_prefix_minus_directory))
-    elif (protocol == CollectionProtocols.VECTOR):
-      RE(daq_macros.vectorZebraScan(currentRequest))
-    elif (protocol == CollectionProtocols.STEP_VECTOR):
-      daq_macros.vectorZebraStepScan(currentRequest)
-    else:
-      pass
+  if (protocol in (CollectionProtocols.STANDARD, CollectionProtocols.BURN):
+    logger.info("vectorSync " + str(time.time()))    
+    daq_macros.vectorSync()
+    logger.info("zebraDaq " + str(time.time()))
+  
+    vector_params = daq_macros.gatherStandardVectorParams()
+    logger.debug(f"vector_params: {vector_params}") 
+    RE(daq_macros.standard_zebra_plan(flyer,angleStart,number_of_images,range_degrees,image_width,exposure_period,file_prefix_minus_directory,data_directory_name,file_number, vector_params, file_prefix_minus_directory))
+  elif (protocol == CollectionProtocols.VECTOR):
+    RE(daq_macros.vectorZebraScan(currentRequest))
+  elif (protocol == CollectionProtocols.STEP_VECTOR):
+    daq_macros.vectorZebraStepScan(currentRequest)
   return 
 
 
@@ -835,21 +821,6 @@ def checkC2C_X(x,fovx): # this is to make sure the user doesn't make too much of
 def center_on_click(x,y,fovx,fovy,source="screen",maglevel=0,jog=0,viewangle=daq_utils.CAMERA_ANGLE_BEAM): #maglevel=0 means lowmag, high fov, #1 = himag with digizoom option, 
   #source=screen = from screen click, otherwise from macro with full pixel dimensions
   #viewangle=daq_utils.CAMERA_ANGLE_BEAM, default camera angle is in-line with the beam
-
-  if daq_utils.beamline == "nyx":
-    logger.info("center_on_click: %s" % str((x,y)))
-    lsdc_x = daq_utils.screenPixX
-    lsdc_y = daq_utils.screenPixY
-    md2_x = getPvDesc("md2CenterPixelX") * 2
-    md2_y = getPvDesc("md2CenterPixelY") * 2
-    scale_x = md2_x / lsdc_x
-    scale_y = md2_y / lsdc_y
-    x = x * scale_x
-    y = y * scale_y
-    str_coords = f'{x} {y}'
-    logger.info(f'center_on_click: {str_coords}')
-    setPvDesc("MD2C2C", str_coords)
-    return
 
   if (getBlConfig('robot_online')): #so that we don't move things when robot moving?
     robotGovState = (getPvDesc("robotSaActive") or getPvDesc("humanSaActive"))
