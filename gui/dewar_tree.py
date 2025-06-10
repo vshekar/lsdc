@@ -321,20 +321,29 @@ class DewarTree(QtWidgets.QTreeView):
             item.setText(position_s)
             item.setData(sample_id, 32)
             item.setData("sample", 33)
-            if sample_id == self.parent.mountedPin_pv.get():
+            if hasattr(self.parent, "mountedPin_pv") and sample_id == self.parent.mountedPin_pv.get():
                 self.set_mounted_sample(item, position_s)
             else:
                 self.set_unmounted_sample(item)
-            if sample_id == self.parent.mountedPin_pv.get():
+            if hasattr(self.parent, "mountedPin_pv") and sample_id == self.parent.mountedPin_pv.get():
                 mountedIndex = self.model.indexFromItem(item)
             # looking for the selected item
             if sample_id == self.parent.selectedSampleID:
                 logger.info("found " + str(self.parent.SelectedItemData))
                 selectedSampleIndex = self.model.indexFromItem(item)
             sampleRequestList = request_data[sample_id]
-            
-            self.add_requests_to_sample(item, sampleRequestList)
-            
+            # base requests are created by the user
+            # nested requests are children of base requests. 
+            # For e.g. 2 rasters in the automated collection are children of the standard collection
+            base_requests = []
+            nested_requests = []
+            for sample_request in sampleRequestList:
+                if sample_request["request_obj"].get("parentReqID", -1) != -1:
+                    nested_requests.append(sample_request)
+                else:
+                    base_requests.append(sample_request)
+
+            self.add_requests_to_sample(item, base_requests, nested_requests)
 
         current_index = None
         if not collectionRunning:
@@ -352,9 +361,9 @@ class DewarTree(QtWidgets.QTreeView):
             self.setCurrentIndex(current_index)
             self.parent.row_clicked(current_index)
 
-    def add_requests_to_sample(self, item, sampleRequestList):
+    def add_requests_to_sample(self, item, base_requests, nested_requests):
         # Go through the sample requests and add them to the sample
-        for idx, request in enumerate(sampleRequestList):
+        for base_index, request in enumerate(base_requests):
             if "protocol" not in request["request_obj"]:
                 continue
             col_item = self.create_request_item(request)
@@ -364,28 +373,59 @@ class DewarTree(QtWidgets.QTreeView):
                 )  ##attempt to leave it on the request after collection
                 collectionRunning = True
 
-            if item.rowCount() == idx:
+            # If number of requests in the tree is less than current index
+            # Append the request to the end of the list
+            if item.rowCount() == base_index:
                 item_idx = self.model.indexFromItem(item)
                 self.expand(item_idx)
                 item.appendRow(col_item)
+            # Otherwise check if the existing request needs to be modified
             else:
-                current_child = item.child(idx)
+                current_child = item.child(base_index)
                 if current_child.data(32) == col_item.data(32):
-                    #if current_child.data(34) != col_item.data(34):
                     current_child = self.update_item_priority(current_child, request)
-                    item.setChild(idx, 0, current_child)
-                        #item.setChild(idx, 0, col_item)
+                    item.setChild(base_index, 0, current_child)
                 else:
-                    item.removeRow(idx)
-                    item.setChild(idx, 0, col_item)
+                    item.removeRow(base_index)
+                    item.setChild(base_index, 0, col_item)
             if (
                 request["uid"] == self.parent.SelectedItemData
             ):  # looking for the selected item, this is a request
                 selectedIndex = self.model.indexFromItem(col_item)
-        if len(sampleRequestList) < item.rowCount():
-            for row in range(item.rowCount() - 1, len(sampleRequestList) - 1, -1):
+        if len(base_requests) < item.rowCount():
+            for row in range(item.rowCount() - 1, len(base_requests) - 1, -1):
                 item.removeRow(row)
 
+        # Once the base requests are added to the dewar tree, start adding child requests
+        for nested_request in nested_requests:
+            if "protocol" not in nested_request["request_obj"]:
+                continue
+            col_item = self.create_request_item(nested_request)
+            if nested_request["priority"] == 99999:
+                selectedIndex = self.model.indexFromItem(
+                    col_item
+                )  ##attempt to leave it on the request after collection
+                collectionRunning = True
+            parent_matches = self.model.match(
+                item.index().child(0,0),
+                32,
+                nested_request["request_obj"]["parentReqID"],
+                hits=1,
+                flags=Qt.MatchExactly | Qt.MatchRecursive
+            )
+            if parent_matches:
+                match_index = parent_matches[0]
+                matched_item = self.model.itemFromIndex(match_index)
+                for row in range(matched_item.rowCount()):
+                    child_request = matched_item.child(row)
+                    if child_request.data(32) == col_item.data(32):
+                        child_request = self.update_item_priority(child_request, nested_request)
+                        matched_item.setChild(row, 0, child_request)
+                        break
+                else:
+                    matched_item.appendRow(col_item)
+                    self.expand(match_index)
+            
     def is_proposal_member(self, proposal_id) -> bool:
         # Check if the user running LSDC is part of the sample's proposal
         try:
