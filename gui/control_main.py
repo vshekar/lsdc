@@ -972,13 +972,18 @@ class ControlMain(QtWidgets.QMainWindow):
             if "pass-" in part:
                 visit_name = f"mx{part.split('-')[1]}-1"
         fast_dp_summary_file = Path(f'{getBlConfig("visitDirectory")}/{visit_name}/fast_dp_dir/fast_dp.summary.csv')
-        summaryTableGB = QtWidgets.QGroupBox()
-        summaryTableGB.setTitle("FastDP Summary")
+        auto_proc_summary_file = Path(f'{getBlConfig("visitDirectory")}/{visit_name}/autoProc_dir/autoPROC.summary.csv')
+        log_widget_tabs = QtWidgets.QTabWidget()
         summaryTableLayout = QtWidgets.QVBoxLayout()
-        self.summaryTableWidget = get_summary_widget(fast_dp_summary_file)
-        summaryTableLayout.addWidget(self.summaryTableWidget)
-        summaryTableGB.setLayout(summaryTableLayout)
-        vBoxMainColLayout.addWidget(summaryTableGB)
+        self.fastdp_summary_table_widget = get_summary_widget(fast_dp_summary_file)
+        self.auto_proc_summary_table_widget = get_summary_widget(auto_proc_summary_file)
+        self.user_log_widget = LogViewerWidget()
+
+        log_widget_tabs.addTab(self.fastdp_summary_table_widget, "Fast DP Summary")
+        log_widget_tabs.addTab(self.auto_proc_summary_table_widget, "AutoPROC Summary")
+        log_widget_tabs.addTab(self.user_log_widget, "User Message Log")
+        
+        vBoxMainColLayout.addWidget(log_widget_tabs)
         
         self.mainColFrame.setLayout(vBoxMainColLayout)
         self.mainToolBox.addItem(self.mainColFrame, "Collection Parameters")

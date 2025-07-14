@@ -1,6 +1,7 @@
 import sys
 from qtpy.QtWidgets import (
     QTextEdit,
+    QPlainTextEdit,
     QVBoxLayout,
     QWidget,
     QTableWidget,
@@ -9,7 +10,7 @@ from qtpy.QtWidgets import (
     QAbstractScrollArea,
 )
 from qtpy.QtCore import QTimer, Qt
-from qtpy.QtGui import QTextOption
+from qtpy.QtGui import QTextOption, QTextCursor, QFont, QFontDatabase
 import csv
 from pathlib import Path
 
@@ -41,9 +42,13 @@ class LogViewerWidget(QWidget):
         self.auto_scroll = True  # Auto-scroll is enabled by default
 
     def initUI(self, max_height):
-        self.text_edit = QTextEdit(self)
+        self.text_edit = QPlainTextEdit(self)
         self.text_edit.setReadOnly(True)
         self.text_edit.setWordWrapMode(QTextOption.NoWrap)
+
+        fixed = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        fixed.setStyleHint(QFont.Monospace)
+        self.text_edit.setFont(fixed)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.text_edit)
@@ -71,15 +76,17 @@ class LogViewerWidget(QWidget):
                 f.seek(self.last_position)
                 new_lines = f.readlines()
                 self.last_position = f.tell()
-
+                new_lines = [ln for ln in new_lines if ln.strip()]
                 if new_lines:
-                    # self.text_edit.append("".join(new_lines))
-                    cursor = self.text_edit.textCursor()
-                    cursor.movePosition(cursor.End)  # Move cursor to the end
-                    cursor.insertText("".join(new_lines))  # Insert text directly
-                    if self.auto_scroll:
-                        self.text_edit.moveCursor(QTextEdit().textCursor().End)
-
+                    self.add_lines(new_lines)
+    
+    def add_lines(self, text):
+        cursor = self.text_edit.textCursor()
+        cursor.movePosition(cursor.End)  # Move cursor to the end
+        cursor.insertText("".join(text))  # Insert text directly
+        if self.auto_scroll:
+            self.text_edit.moveCursor(QTextCursor.End)
+        
 
 class CSVTableWidget(QTableWidget):
     def __init__(self, parent=None, file_path=None):
