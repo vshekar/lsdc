@@ -17,6 +17,7 @@ from config_params import (
     MountState
 )
 from config_params import CollectionProtocols
+from threads import DataFetchRunnable
 
 if typing.TYPE_CHECKING:
     from lsdcGui import ControlMain
@@ -40,13 +41,33 @@ class DewarTree(QtWidgets.QTreeView):
         self.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
         self.setAnimated(True)
         self.model = QtGui.QStandardItemModel()
-
+        self.setModel(self.model)
+        self.model.itemChanged.connect(self.queueSelectedSample)
         # self.isExpanded = 1
+        self.initialized = False
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.openMenu)
         self.setStyleSheet("QTreeView::item::hover{background-color: #999966;}")
         # Keeps track of whether the user is part of a proposal
         self.proposal_membership = {}
+        self.follow_current_request = False
+        self._programmatic_status_update = False
+        self.threadPool = QtCore.QThreadPool.globalInstance()
+        self.refresh_running = False
+        self.expanded.connect(self.on_expanded)
+
+    def on_expanded(self, index):
+        for row in range(self.model.rowCount(index)):
+            child_index = self.model.index(row, 0, index)
+            self.expand(child_index)
+        
+
+    def toggle_follow_request(self, check_state):
+        if check_state == Qt.CheckState.Checked:
+            self.follow_current_request = True
+            self.refreshTree()
+        else:
+            self.follow_current_request = False
 
     def openMenu(self, position):
         indexes = self.selectedIndexes()
@@ -137,7 +158,43 @@ class DewarTree(QtWidgets.QTreeView):
             super(DewarTree, self).keyPressEvent(event)
 
     def refreshTree(self):
-        self.parent.dewarViewToggleCheckCB()
+        self._programmatic_status_update = True
+        self.refreshTreeDewarView()
+        self._programmatic_status_update = False
+
+    def refreshTreeThreaded(self):
+        if self.refresh_running:
+            # A refresh is already running, so ignore the new request.
+            return
+
+        self.refresh_running = True  # Mark that a refresh is in progress
+        self.runnable = DataFetchRunnable(self.fetchData)
+        self.runnable.signal.finished.connect(self.update_model)
+        self.threadPool.start(self.runnable)
+
+    def fetchData(self):
+        """
+        This method performs the heavy data retrieval.
+        It must not interact with any GUI elements.
+        """
+        dewar_data, puck_data, sample_data, request_data = db_lib.get_dewar_tree_data(
+            daq_utils.primaryDewarName, daq_utils.beamline, get_latest_pucks=False
+        )
+        # Return the fetched data in a convenient container.
+        return {
+            "dewar_data": dewar_data,
+            "puck_data": puck_data,
+            "sample_data": sample_data,
+            "request_data": request_data,
+        }
+
+    def set_unmounted_sample(self, item):
+        item.setForeground(QtGui.QColor("black"))
+        font = QtGui.QFont()
+        font.setUnderline(False)
+        font.setItalic(False)
+        font.setOverline(False)
+        item.setFont(font)
 
     def set_mounted_sample(self, item, sample_name=None):
         # Formats the text of the item that is passed in as the mounted sample
@@ -156,10 +213,24 @@ class DewarTree(QtWidgets.QTreeView):
 
     def refreshTreeDewarView(self, get_latest_pucks=False):
         puck = ""
-        self.model.clear()
+        #self.model.clear()
         dewar_data, puck_data, sample_data, request_data = db_lib.get_dewar_tree_data(
             daq_utils.primaryDewarName, daq_utils.beamline, get_latest_pucks
         )
+        data = {
+            "dewar_data": dewar_data,
+            "puck_data": puck_data,
+            "sample_data": sample_data,
+            "request_data": request_data,
+        }
+        self.update_model(data)
+
+    def update_model(self, data):
+        self._programmatic_status_update = True
+        dewar_data = data["dewar_data"]
+        puck_data = data["puck_data"]
+        sample_data = data["sample_data"]
+        request_data = data["request_data"]
         parentItem = self.model.invisibleRootItem()
         for i, puck_id in enumerate(
             dewar_data["content"]
@@ -174,19 +245,24 @@ class DewarTree(QtWidgets.QTreeView):
             item = QtGui.QStandardItem(QtGui.QIcon(ICON), f"{index_s} {puckName}")
             item.setData(puckName, 32)
             item.setData("container", 33)
-            parentItem.appendRow(item)
+            if parentItem.rowCount() == i:
+                parentItem.appendRow(item)
+            elif item.data(32) != parentItem.child(i).data(32):
+                # parentItem.takeChild(i,0)
+                parentItem.setChild(i, 0, item)
+            
+            updated_item = parentItem.child(i)
             if puck != "" and puckName != "private":
                 puckContents = puck.get("content", [])
                 self.add_samples_to_puck_tree(
-                    puckContents, item, index_s, sample_data, request_data
+                    puckContents, updated_item, index_s, sample_data, request_data
                 )
-        self.setModel(self.model)
-        self.model.itemChanged.connect(self.queueSelectedSample)
-        if self.isExpanded:
+        #self.setModel(self.model)
+        if not self.initialized:
             self.expandAll()
-        else:
-            self.collapseAll()
-        self.scrollTo(self.currentIndex(), QtWidgets.QAbstractItemView.PositionAtCenter)
+            self.initialized = True
+        self._programmatic_status_update = False
+        self.refresh_running = False
 
     def add_samples_to_puck_tree(
         self,
@@ -208,7 +284,11 @@ class DewarTree(QtWidgets.QTreeView):
                 position_s = str(j + 1)
                 item = QtGui.QStandardItem(QtGui.QIcon(ICON), position_s)
                 item.setData("", 32)
-                parentItem.appendRow(item)
+                if parentItem.rowCount() == j:
+                    parentItem.appendRow(item)
+                else:
+                    parentItem.takeChild(j, 0)
+                    parentItem.setChild(j, 0, item)
                 continue
 
             sample = sample_data[sample_id]
@@ -231,38 +311,40 @@ class DewarTree(QtWidgets.QTreeView):
                 parentItem.setText(f"{parentItem.text()} -- {proposal_id_text}")
 
             position_s = f'{j+1}-{sample.get("name", "")}'
-            item = QtGui.QStandardItem(
-                QtGui.QIcon(ICON),
-                position_s,
-            )
-            # just stuck sampleID there, but negate it to diff from reqID
+            if parentItem.rowCount() == j:
+                item = QtGui.QStandardItem(
+                    QtGui.QIcon(ICON),
+                    position_s,
+                )
+                parentItem.appendRow(item)
+            else:
+                item = parentItem.child(j)
+            item.setText(position_s)
             item.setData(sample_id, 32)
             item.setData("sample", 33)
-            if sample_id == self.parent.mountedPin_pv.get():
+            if hasattr(self.parent, "mountedPin_pv") and sample_id == self.parent.mountedPin_pv.get():
                 self.set_mounted_sample(item, position_s)
-            parentItem.appendRow(item)
-
-            if sample_id == self.parent.mountedPin_pv.get():
+            else:
+                self.set_unmounted_sample(item)
+            if hasattr(self.parent, "mountedPin_pv") and sample_id == self.parent.mountedPin_pv.get():
                 mountedIndex = self.model.indexFromItem(item)
             # looking for the selected item
             if sample_id == self.parent.selectedSampleID:
                 logger.info("found " + str(self.parent.SelectedItemData))
                 selectedSampleIndex = self.model.indexFromItem(item)
             sampleRequestList = request_data[sample_id]
-            for request in sampleRequestList:
-                if not ("protocol" in request["request_obj"]):
-                    continue
-                col_item = self.create_request_item(request)
-                if request["priority"] == 99999:
-                    selectedIndex = self.model.indexFromItem(
-                        col_item
-                    )  ##attempt to leave it on the request after collection
-                    collectionRunning = True
-                item.appendRow(col_item)
-                if (
-                    request["uid"] == self.parent.SelectedItemData
-                ):  # looking for the selected item, this is a request
-                    selectedIndex = self.model.indexFromItem(col_item)
+            # base requests are created by the user
+            # nested requests are children of base requests. 
+            # For e.g. 2 rasters in the automated collection are children of the standard collection
+            base_requests = []
+            nested_requests = []
+            for sample_request in sampleRequestList:
+                if sample_request["request_obj"].get("parentReqID", -1) != -1:
+                    nested_requests.append(sample_request)
+                else:
+                    base_requests.append(sample_request)
+
+            self.add_requests_to_sample(item, base_requests, nested_requests)
 
         current_index = None
         if not collectionRunning:
@@ -276,10 +358,75 @@ class DewarTree(QtWidgets.QTreeView):
         elif collectionRunning and mountedIndex:
             current_index = mountedIndex
 
-        if current_index:
+        if current_index and self.follow_current_request:
             self.setCurrentIndex(current_index)
             self.parent.row_clicked(current_index)
 
+    def add_requests_to_sample(self, item, base_requests, nested_requests):
+        # Go through the sample requests and add them to the sample
+        for base_index, request in enumerate(base_requests):
+            if "protocol" not in request["request_obj"]:
+                continue
+            col_item = self.create_request_item(request)
+            if request["priority"] == 99999:
+                selectedIndex = self.model.indexFromItem(
+                    col_item
+                )  ##attempt to leave it on the request after collection
+                collectionRunning = True
+
+            # If number of requests in the tree is less than current index
+            # Append the request to the end of the list
+            if item.rowCount() == base_index:
+                item_idx = self.model.indexFromItem(item)
+                self.expand(item_idx)
+                item.appendRow(col_item)
+            # Otherwise check if the existing request needs to be modified
+            else:
+                current_child = item.child(base_index)
+                if current_child.data(32) == col_item.data(32):
+                    current_child = self.update_item_priority(current_child, request)
+                    item.setChild(base_index, 0, current_child)
+                else:
+                    item.removeRow(base_index)
+                    item.setChild(base_index, 0, col_item)
+            if (
+                request["uid"] == self.parent.SelectedItemData
+            ):  # looking for the selected item, this is a request
+                selectedIndex = self.model.indexFromItem(col_item)
+        if len(base_requests) < item.rowCount():
+            for row in range(item.rowCount() - 1, len(base_requests) - 1, -1):
+                item.removeRow(row)
+
+        # Once the base requests are added to the dewar tree, start adding child requests
+        for nested_request in nested_requests:
+            if "protocol" not in nested_request["request_obj"]:
+                continue
+            col_item = self.create_request_item(nested_request)
+            if nested_request["priority"] == 99999:
+                selectedIndex = self.model.indexFromItem(
+                    col_item
+                )  ##attempt to leave it on the request after collection
+                collectionRunning = True
+            parent_matches = self.model.match(
+                item.index().child(0,0),
+                32,
+                nested_request["request_obj"]["parentReqID"],
+                hits=1,
+                flags=Qt.MatchExactly | Qt.MatchRecursive
+            )
+            if parent_matches:
+                match_index = parent_matches[0]
+                matched_item = self.model.itemFromIndex(match_index)
+                for row in range(matched_item.rowCount()):
+                    child_request = matched_item.child(row)
+                    if child_request.data(32) == col_item.data(32):
+                        child_request = self.update_item_priority(child_request, nested_request)
+                        matched_item.setChild(row, 0, child_request)
+                        break
+                else:
+                    matched_item.appendRow(col_item)
+                    self.expand(match_index)
+            
     def is_proposal_member(self, proposal_id) -> bool:
         # Check if the user running LSDC is part of the sample's proposal
         try:
@@ -308,26 +455,34 @@ class DewarTree(QtWidgets.QTreeView):
         )
         col_item.setData(request["uid"], 32)
         col_item.setData("request", 33)
+        col_item.setData(request["priority"], 34)
         col_item.setFlags(
             Qt.ItemFlag.ItemIsUserCheckable  # type:ignore
             | Qt.ItemFlag.ItemIsEnabled
             | Qt.ItemFlag.ItemIsEditable
             | Qt.ItemFlag.ItemIsSelectable
         )
-        if request["priority"] == 99999:
+        col_item = self.update_item_priority(col_item, request)
+        col_item.setToolTip(self.fillToolTip(request))
+        return col_item
+
+    def update_item_priority(self, col_item, request):
+        col_item.setData(request["priority"],34)
+        if col_item.data(34) == 99999:
             col_item.setCheckState(Qt.CheckState.Checked)
             col_item.setBackground(QtGui.QColor("green"))
             self.parent.refreshCollectionParams(request, validate_hdf5=False)
-        elif request["priority"] > 0:
+        elif col_item.data(34) > 0:
             col_item.setCheckState(Qt.CheckState.Checked)
             col_item.setBackground(QtGui.QColor("white"))
-        elif request["priority"] < 0:
+        elif col_item.data(34) < 0:
             col_item.setCheckable(False)
+            col_item.setData(None, Qt.CheckStateRole)
             col_item.setBackground(QtGui.QColor("cyan"))
         else:
             col_item.setCheckState(Qt.CheckState.Unchecked)
             col_item.setBackground(QtGui.QColor("white"))
-        col_item.setToolTip(self.fillToolTip(request))
+        
         return col_item
 
     def refreshTreePriorityView(
@@ -427,17 +582,23 @@ class DewarTree(QtWidgets.QTreeView):
         self.expandAll()
 
     def queueSelectedSample(self, item):
-        if item.data(33) == "request":
-            reqID = str(item.data(32))
-            checkedSampleRequest = db_lib.getRequestByID(reqID)  # line not needed???
-            if item.checkState() == Qt.Checked:
-                db_lib.updatePriority(reqID, 5000)
-            else:
-                db_lib.updatePriority(reqID, 0)
-            item.setBackground(QtGui.QColor("white"))
-            self.parent.treeChanged_pv.put(
-                self.parent.processID
-            )  # the idea is touch the pv, but have this gui instance not refresh
+        if self._programmatic_status_update:
+            return
+        if self.parent.controlEnabled():
+            if item.data(33) == "request":
+                reqID = str(item.data(32))
+                if item.checkState() == Qt.Checked:
+                    db_lib.updatePriority(reqID, 5000)
+                else:
+                    db_lib.updatePriority(reqID, 0)
+                item.setBackground(QtGui.QColor("white"))
+                self.parent.treeChanged_pv.put(
+                    self.parent.processID
+                    #1
+                )  # the idea is touch the pv, but have this gui instance not refresh
+        else:
+            self.refreshTree()
+            self.parent.popupServerMessage("You don't have control")
 
     def queueAllSelectedCB(self):
         selmod = self.selectionModel()
