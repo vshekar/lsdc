@@ -656,7 +656,7 @@ def collectData(currentRequest):
           sweep_start = reqObj["sweep_start"]
           logger.info(f"AutoLoop (absolute mode): start angle set to {sweep_start}")
         if (reqObj["centeringOption"] == "AutoRaster"):
-          reqObj["sweep_start"] = beamline_lib.motorPosFromDescriptor("omega") - 90.0 #%360.0?
+          reqObj["sweep_start"] = beamline_lib.motorPosFromDescriptor("omega") - 90.0 + original_sweep_start
           sweep_start = reqObj["sweep_start"]
       daq_macros.setTrans(attenuation)      
 
