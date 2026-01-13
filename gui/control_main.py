@@ -1574,7 +1574,7 @@ class ControlMain(QtWidgets.QMainWindow):
         
 
         self.hutchCornerCamThread = VideoThread(
-            parent=self, delay=HUTCH_TIMER_DELAY, url=getBlConfig("hutchCornerCamURL")
+            parent=self, delay=HUTCH_TIMER_DELAY, mjpg_url=getBlConfig("hutchCornerCamURL")+"?resolution=320x180"
         )
         self.hutchCornerCamThread.frame_ready.connect(
             lambda frame: self.updateCam(self.pixmap_item_HutchCorner, frame)
@@ -1582,7 +1582,7 @@ class ControlMain(QtWidgets.QMainWindow):
         self.hutchCornerCamThread.start()
 
         self.hutchTopCamThread = VideoThread(
-            parent=self, delay=HUTCH_TIMER_DELAY, url=getBlConfig("hutchTopCamURL")
+            parent=self, delay=HUTCH_TIMER_DELAY, mjpg_url=getBlConfig("hutchTopCamURL")+"?resolution=320x180"
         )
         self.hutchTopCamThread.frame_ready.connect(
             lambda frame: self.updateCam(self.pixmap_item_HutchTop, frame)
