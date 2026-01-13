@@ -56,7 +56,6 @@ functions = [
     continue_data_collection,
     mountSample,
     unmountSample,
-    reprocessRaster,
     fastDPNodes,
     spotNodes,
     unmountCold,
@@ -125,10 +124,10 @@ def pybass_init():
   try:
     sitefilename = os.environ["LSDC_SITE_FILE"]
   except KeyError:
-    gui_message("\$LSDC_SITE_FILE not defined. Questionable defaults in effect.")
+    gui_message("LSDC_SITE_FILE not defined. Questionable defaults in effect.")
   if (sitefilename != ""):    
     if (os.path.exists(sitefilename) == 0):
-      error_msg = "\$LSDC_SITE_FILE: %s does not exist. Questionable defaults in effect." % sitefilename
+      error_msg = "LSDC_SITE_FILE: %s does not exist. Questionable defaults in effect." % sitefilename
       gui_message(error_msg)
     else:
       process_command_file(sitefilename)
