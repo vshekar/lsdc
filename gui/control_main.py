@@ -180,9 +180,11 @@ class ControlMain(QtWidgets.QMainWindow):
         self.redPen = QtGui.QPen(QtCore.Qt.red)
         self.bluePen = QtGui.QPen(QtCore.Qt.blue)
         self.yellowPen = QtGui.QPen(QtCore.Qt.yellow)
-        if daq_utils.beamline != "nyx":
-          self.albulaInterface = AlbulaInterface(ip=os.environ["EIGER_DCU_IP"], 
-                                                 gov_message_pv_name=daq_utils.pvLookupDict["governorMessage"],)
+        self.albulaInterface = AlbulaInterface(ip=os.environ["EIGER_DCU_IP"], 
+                                                 gov_message_pv_name=daq_utils.pvLookupDict["governorMessage"],
+                                                 python_path=os.environ["PYTHONPATH_ALBULA"])
+
+        self.dewar_plate_pos_pv = PV(daq_utils.pvLookupDict["dewarPlatePos"])
         self.initUI()
         self.initOphyd()
         self.govStateMessagePV = PV(daq_utils.pvLookupDict["governorMessage"])
