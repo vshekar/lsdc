@@ -28,7 +28,6 @@ from threading import Thread
 from config_params import *
 from ophyd.status import SubscriptionStatus
 from ophyd.utils import WaitTimeoutError
-from kafka_producer import send_kafka_message
 
 import gov_lib
 import urllib.request
@@ -1060,7 +1059,6 @@ def snakeRasterBluesky(rasterReqID, grain=""):
                                                               rasterReqID))
           spotFindThread.start()
           spotFindThreadList.append(spotFindThread)
-        send_kafka_message(f'{daq_utils.beamline}.lsdc.documents', event='event', uuid=rasterReqID, protocol=CollectionProtocols.RASTER, row=row_index, proc_flag=procFlag)
         logger.info('row complete')
     """governor transitions:
     initiate transitions here allows for GUI sample/heat map image to update
